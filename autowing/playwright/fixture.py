@@ -5,13 +5,30 @@ from autowing.core.llm.factory import LLMFactory
 
 
 class PlaywrightAiFixture:
+    """
+    A fixture class that combines Playwright with AI capabilities for web automation.
+    Provides AI-driven interaction with web pages using various LLM providers.
+    """
 
     def __init__(self, page: Page):
+        """
+        Initialize the AI-powered Playwright fixture.
+
+        Args:
+            page (Page): The Playwright page object to automate
+        """
         self.page = page
         self.llm_client = LLMFactory.create()
-        
+
     def _get_page_context(self) -> Dict[str, Any]:
-        """获取页面上下文信息"""
+        """
+        Extract context information from the current page.
+        Collects information about visible elements and page metadata.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing page URL, title, and information about
+                           visible interactive elements
+        """
         # 获取页面基本信息
         basic_info = {
             "url": self.page.url,
@@ -55,7 +72,17 @@ class PlaywrightAiFixture:
         }
         
     def ai_action(self, prompt: str) -> None:
-        """执行AI驱动的页面操作"""
+        """
+        Execute an AI-driven action on the page based on the given prompt.
+        The AI will analyze the page context and perform the requested action.
+
+        Args:
+            prompt (str): Natural language description of the action to perform
+
+        Raises:
+            ValueError: If the AI response cannot be parsed or contains invalid instructions
+            Exception: If the requested action cannot be performed
+        """
         context = self._get_page_context()
         
         # 构建提示，明确要求JSON格式的响应
@@ -122,7 +149,18 @@ Example response:
             raise ValueError(f"Failed to parse instruction: {response}")
             
     def ai_query(self, prompt: str) -> Any:
-        """查询页面信息"""
+        """
+        Query information from the page using AI analysis.
+
+        Args:
+            prompt (str): Natural language query about the page content
+
+        Returns:
+            Any: The query results as parsed from the AI response
+
+        Raises:
+            ValueError: If the AI response cannot be parsed into valid JSON
+        """
         context = self._get_page_context()
         
         query_prompt = f"""
@@ -155,7 +193,18 @@ Return ONLY a JSON array of results, no other text.
             raise ValueError(f"Failed to parse query results: {response}")
             
     def ai_assert(self, prompt: str) -> bool:
-        """验证页面状态"""
+        """
+        Verify a condition on the page using AI analysis.
+
+        Args:
+            prompt (str): Natural language description of the condition to verify
+
+        Returns:
+            bool: True if the condition is met, False otherwise
+
+        Raises:
+            ValueError: If the AI response cannot be parsed as a boolean value
+        """
         context = self._get_page_context()
         
         assert_prompt = f"""
@@ -189,5 +238,11 @@ Example: true
 
 
 def create_fixture():
-    """Create a PlaywrightAiFixture factory"""
-    return PlaywrightAiFixture 
+    """
+    Create a PlaywrightAiFixture factory.
+
+    Returns:
+        Callable[[Page], PlaywrightAiFixture]: A factory function that creates
+        PlaywrightAiFixture instances
+    """
+    return PlaywrightAiFixture

@@ -7,6 +7,10 @@ from autowing.core.llm.deepseek_client import DeepSeekClient
 
 
 class LLMFactory:
+    """
+    Factory class for creating Language Model clients.
+    Provides centralized management of different LLM implementations.
+    """
 
     _models = {
         'openai': OpenAIClient,
@@ -16,8 +20,16 @@ class LLMFactory:
 
     @classmethod
     def create(cls) -> BaseLLMClient:
-        model_name = os.getenv("AUTOWING_MODEL_PROVIDER", "qwen").lower()
+        """
+        Create an instance of the configured LLM client.
 
+        Returns:
+            BaseLLMClient: An instance of the specified LLM client
+
+        Raises:
+            ValueError: If the specified model provider is not supported
+        """
+        model_name = os.getenv("AUTOWING_MODEL_PROVIDER", "deepseek").lower()
         if model_name not in cls._models:
             raise ValueError(f"Unsupported model provider: {model_name}")
 
@@ -26,4 +38,11 @@ class LLMFactory:
     
     @classmethod
     def register_model(cls, name: str, model_class: Type[BaseLLMClient]) -> None:
+        """
+        Register a new LLM client implementation.
+
+        Args:
+            name (str): The name to register the model under
+            model_class (Type[BaseLLMClient]): The class implementing the BaseLLMClient interface
+        """
         cls._models[name.lower()] = model_class 

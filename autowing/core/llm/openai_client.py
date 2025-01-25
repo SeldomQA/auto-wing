@@ -5,8 +5,22 @@ from autowing.core.llm.base import BaseLLMClient
 
 
 class OpenAIClient(BaseLLMClient):
+    """
+    OpenAI API client implementation.
+    Provides access to OpenAI's GPT and vision models.
+    """
 
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+        """
+        Initialize the OpenAI client.
+
+        Args:
+            api_key (Optional[str]): OpenAI API key. If not provided, will try to get from OPENAI_API_KEY env var
+            base_url (Optional[str]): Custom base URL for API requests
+
+        Raises:
+            ValueError: If no API key is provided or found in environment variables
+        """
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OpenAI API key is required")
@@ -21,6 +35,19 @@ class OpenAIClient(BaseLLMClient):
         self.client = OpenAI(**client_kwargs)
         
     def complete(self, prompt: str, context: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Generate a completion using GPT-4.
+
+        Args:
+            prompt (str): The text prompt to complete
+            context (Optional[Dict[str, Any]]): Additional context for the completion
+
+        Returns:
+            str: The model's response text
+
+        Raises:
+            Exception: If there's an error communicating with the OpenAI API
+        """
         try:
             response = self.client.chat.completions.create(
                 model="gpt-4",
@@ -34,6 +61,19 @@ class OpenAIClient(BaseLLMClient):
             raise Exception(f"OpenAI API error: {str(e)}")
             
     def complete_with_vision(self, prompt: Dict[str, Any]) -> str:
+        """
+        Generate a completion for vision tasks using GPT-4 Vision.
+
+        Args:
+            prompt (Dict[str, Any]): A dictionary containing messages and image data
+                                   in the format required by the GPT-4 Vision API
+
+        Returns:
+            str: The model's response text
+
+        Raises:
+            Exception: If there's an error communicating with the OpenAI Vision API
+        """
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
