@@ -1,3 +1,6 @@
+"""
+pytest example for Selenium with AI automation.
+"""
 import time
 import pytest
 from selenium import webdriver
@@ -11,7 +14,7 @@ def driver():
     """
     Create and configure Edge WebDriver instance.
     """
-
+    # loading .env file
     load_dotenv()
 
     driver = webdriver.Edge()
