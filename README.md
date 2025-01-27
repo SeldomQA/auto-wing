@@ -9,13 +9,13 @@ auto-wing是一个利用LLM辅助自动化测试的工具, 为你的自动化测
 
 ### Features
 
-⭐ 支持多种操作：`ai_action`、`ai_query`、`ai_assert`等。
+⭐ 支持多种操作：`ai_action`、`ai_query`、`ai_assert`。
 
 ⭐ 支持多模型：`openai`、`qwen` 和 `deepseek`。
 
-⭐ 支持 `playwright`、`selenium`等。
+⭐ 支持 `playwright`、`selenium`。
 
-⭐ 方便的和现有自动化项目集成。
+⭐ 方便的和现有自动化项目（`pytest`、`unittest`）集成。
 
 ### Install
 
@@ -112,3 +112,11 @@ def test_bing_search(page: Page, ai):
     # 使用AI断言
     assert ai.ai_assert('检查搜索结果列表第一条标题是否包含"playwright"字符串')
 ```
+
+### 交流
+
+> 欢迎添加微信，交流和反馈问题。
+
+<div style="display: flex;justify-content: space-between;width: 100%">
+    <p><img alt="微信" src="./wechat.jpg" style="width: 200px;height: 100%" ></p>
+</div>
