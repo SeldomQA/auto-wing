@@ -7,6 +7,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException
 from autowing.core.llm.factory import LLMFactory
+from loguru import logger
 
 
 class SeleniumAiFixture:
@@ -89,6 +90,7 @@ class SeleniumAiFixture:
             ValueError: If the AI response cannot be parsed or contains invalid instructions
             TimeoutException: If the element cannot be found or interacted with
         """
+        logger.info(f"🪽 AI Action: {prompt}")
         context = self._get_page_context()
         
         action_prompt = f"""
@@ -163,6 +165,7 @@ No other text or explanation.
         Raises:
             ValueError: If the AI response cannot be parsed into the requested format
         """
+        logger.info(f"🪽 AI Query: {prompt}")
         context = self._get_page_context()
         
         # 解析请求的数据格式
@@ -223,7 +226,9 @@ No other text or explanation.
             # 尝试解析JSON
             try:
                 result = json.loads(response)
-                return self._validate_result_format(result, format_hint)
+                query_info = self._validate_result_format(result, format_hint)
+                logger.debug(f"🖹 Query: {query_info}")
+                return query_info
             except json.JSONDecodeError:
                 # 如果是字符串数组格式，尝试从文本中提取
                 if format_hint == 'string[]':
@@ -244,7 +249,9 @@ No other text or explanation.
                     
                     if results:
                         seen = set()
-                        return [x for x in results if not (x in seen or seen.add(x))]
+                        query_info = [x for x in results if not (x in seen or seen.add(x))]
+                        logger.debug(f"📄 Query: {query_info}")
+                        return query_info
                 
                 raise ValueError(f"Failed to parse response as JSON: {response[:100]}...")
             
@@ -286,6 +293,7 @@ No other text or explanation.
         Raises:
             ValueError: If the AI response cannot be parsed as a boolean value
         """
+        logger.info(f"🪽 AI Assert: {prompt}")
         context = self._get_page_context()
         
         assert_prompt = f"""

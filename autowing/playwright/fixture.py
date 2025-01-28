@@ -2,6 +2,7 @@ from typing import Any, Dict
 import json
 from playwright.sync_api import Page
 from autowing.core.llm.factory import LLMFactory
+from loguru import logger
 
 
 class PlaywrightAiFixture:
@@ -83,6 +84,7 @@ class PlaywrightAiFixture:
             ValueError: If the AI response cannot be parsed or contains invalid instructions
             Exception: If the requested action cannot be performed
         """
+        logger.info(f"🪽 AI Action: {prompt}")
         context = self._get_page_context()
         
         # 构建提示，明确要求JSON格式的响应
@@ -163,6 +165,7 @@ Example response:
         Raises:
             ValueError: If the AI response cannot be parsed into the requested format
         """
+        logger.info(f"🪽 AI Query: {prompt}")
         context = self._get_page_context()
         
         # 解析请求的数据格式
@@ -226,7 +229,9 @@ No other text or explanation.
             # 尝试解析JSON
             try:
                 result = json.loads(response)
-                return self._validate_result_format(result, format_hint)
+                query_info = self._validate_result_format(result, format_hint)
+                logger.debug(f"📄 Query: {query_info}")
+                return query_info
             except json.JSONDecodeError:
                 # 如果是字符串数组格式，尝试从文本中提取
                 if format_hint == 'string[]':
@@ -252,7 +257,9 @@ No other text or explanation.
                     if results:
                         # 去重并保持顺序
                         seen = set()
-                        return [x for x in results if not (x in seen or seen.add(x))]
+                        query_info = [x for x in results if not (x in seen or seen.add(x))]
+                        logger.debug(f"📄 Query: {query_info}")
+                        return query_info
                 
                 raise ValueError(f"Failed to parse response as JSON: {response[:100]}...")
             
@@ -311,6 +318,7 @@ No other text or explanation.
         Raises:
             ValueError: If the AI response cannot be parsed as a boolean value
         """
+        logger.info(f"🪽 AI Assert: {prompt}")
         context = self._get_page_context()
         
         # 优化提示，使其更简洁，更明确要求布尔值返回
