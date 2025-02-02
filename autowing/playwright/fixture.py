@@ -2,10 +2,11 @@ from typing import Any, Dict
 import json
 from playwright.sync_api import Page
 from autowing.core.llm.factory import LLMFactory
+from autowing.core.ai_fixture_base import AiFixtureBase
 from loguru import logger
 
 
-class PlaywrightAiFixture:
+class PlaywrightAiFixture(AiFixtureBase):
     """
     A fixture class that combines Playwright with AI capabilities for web automation.
     Provides AI-driven interaction with web pages using various LLM providers.
@@ -30,13 +31,13 @@ class PlaywrightAiFixture:
             Dict[str, Any]: A dictionary containing page URL, title, and information about
                            visible interactive elements
         """
-        # 获取页面基本信息
+        # Get basic page info
         basic_info = {
             "url": self.page.url,
             "title": self.page.title()
         }
         
-        # 获取关键元素信息
+        # Get key elements info
         elements_info = self.page.evaluate("""() => {
             const getVisibleElements = () => {
                 const elements = [];
@@ -87,7 +88,7 @@ class PlaywrightAiFixture:
         logger.info(f"🪽 AI Action: {prompt}")
         context = self._get_page_context()
         
-        # 构建提示，明确要求JSON格式的响应
+        # Construct the prompt, explicitly requiring a JSON response
         action_prompt = f"""
 You are a web automation assistant. Based on the following page context, provide instructions for the requested action.
 
@@ -118,23 +119,16 @@ Example response:
 """
         
         response = self.llm_client.complete(action_prompt)
-        
+        cleaned_response = self._clean_response(response)
         try:
-            # 尝试提取JSON部分
-            json_str = response
-            if '```json' in response:
-                json_str = response.split('```json')[1].split('```')[0].strip()
-            elif '```' in response:
-                json_str = response.split('```')[1].split('```')[0].strip()
-                
-            instruction = json.loads(json_str)
+            instruction = json.loads(cleaned_response)
             selector = instruction.get('selector')
             action = instruction.get('action')
             
             if not selector or not action:
                 raise ValueError("Invalid instruction format")
                 
-            # 执行操作
+            # Perform the action
             element = self.page.locator(selector)
             if action == 'click':
                 element.click()
@@ -148,7 +142,7 @@ Example response:
                 raise ValueError(f"Unsupported action: {action}")
                 
         except json.JSONDecodeError:
-            raise ValueError(f"Failed to parse instruction: {response}")
+            raise ValueError(f"Failed to parse instruction: {cleaned_response}")
             
     def ai_query(self, prompt: str) -> Any:
         """
@@ -168,13 +162,13 @@ Example response:
         logger.info(f"🪽 AI Query: {prompt}")
         context = self._get_page_context()
         
-        # 解析请求的数据格式
+        # Parse the requested data format
         format_hint = ""
         if prompt.startswith(('string[]', 'number[]', 'object[]')):
             format_hint = prompt.split(',')[0].strip()
             prompt = ','.join(prompt.split(',')[1:]).strip()
 
-        # 根据不同的格式提供不同的提示
+        # Provide different prompts based on the format
         if format_hint == 'string[]':
             query_prompt = f"""
 Extract text content matching the query. Return ONLY a JSON array of strings.
@@ -198,7 +192,7 @@ Return format example: [1, 2, 3]
 No other text or explanation.
 """
         else:
-            # 默认提示
+            # Default prompt
             query_prompt = f"""
 Extract information matching the query. Return ONLY in valid JSON format.
 
@@ -214,40 +208,31 @@ Return format:
 No other text or explanation.
 """
 
+        response = self.llm_client.complete(query_prompt)
+        cleaned_response = self._clean_response(response)
         try:
-            response = self.llm_client.complete(query_prompt)
-            
-            # 清理响应
-            response = response.strip()
-            
-            # 移除可能的markdown格式
-            if '```' in response:
-                response = response.split('```')[1].split('```')[0].strip()
-                if response.startswith(('json', 'python')):
-                    response = response.split('\n', 1)[1]
-            
-            # 尝试解析JSON
+            cleaned_response = self._clean_response(response)
             try:
-                result = json.loads(response)
+                result = json.loads(cleaned_response)
                 query_info = self._validate_result_format(result, format_hint)
                 logger.debug(f"📄 Query: {query_info}")
                 return query_info
             except json.JSONDecodeError:
-                # 如果是字符串数组格式，尝试从文本中提取
+                # If it's a string array format, try extracting from text
                 if format_hint == 'string[]':
-                    # 分割文本并清理
-                    lines = [line.strip() for line in response.split('\n') 
+                    # Split and clean text
+                    lines = [line.strip() for line in cleaned_response.split('\n') 
                             if line.strip() and not line.startswith(('-', '*', '#'))]
                     
-                    # 提取包含查询关键词的行
+                    # Extract lines containing query terms
                     query_terms = [term.lower() for term in prompt.split() 
                                  if len(term) > 2 and term.lower() not in ['the', 'and', 'for']]
                     
                     results = []
                     for line in lines:
-                        # 检查是否包含查询关键词
+                        # Check if line contains query terms
                         if any(term in line.lower() for term in query_terms):
-                            # 清理文本
+                            # Clean text
                             text = line.strip('`"\'- ,')
                             if ':' in text:
                                 text = text.split(':', 1)[1].strip()
@@ -255,55 +240,16 @@ No other text or explanation.
                                 results.append(text)
                     
                     if results:
-                        # 去重并保持顺序
+                        # Remove duplicates while preserving order
                         seen = set()
                         query_info = [x for x in results if not (x in seen or seen.add(x))]
                         logger.debug(f"📄 Query: {query_info}")
                         return query_info
                 
-                raise ValueError(f"Failed to parse response as JSON: {response[:100]}...")
+                raise ValueError(f"Failed to parse response as JSON: {cleaned_response[:100]}...")
             
         except Exception as e:
-            raise ValueError(f"Query failed. Error: {str(e)}\nResponse: {response[:100]}...")
-
-    def _validate_result_format(self, result: Any, format_hint: str) -> Any:
-        """
-        Validate and convert the result to match the requested format.
-
-        Args:
-            result: The parsed result from AI response
-            format_hint: The requested format (e.g., 'string[]')
-
-        Returns:
-            The validated and possibly converted result
-
-        Raises:
-            ValueError: If the result doesn't match the requested format
-        """
-        if not format_hint:
-            return result
-
-        if format_hint == 'string[]':
-            if not isinstance(result, list):
-                result = [str(result)]
-            return [str(item) for item in result]
-        
-        if format_hint == 'number[]':
-            if not isinstance(result, list):
-                result = [result]
-            try:
-                return [float(item) for item in result]
-            except (ValueError, TypeError):
-                raise ValueError(f"Cannot convert results to numbers: {result}")
-        
-        if format_hint == 'object[]':
-            if not isinstance(result, list):
-                result = [result]
-            if not all(isinstance(item, dict) for item in result):
-                raise ValueError(f"Not all items are objects: {result}")
-            return result
-
-        return result
+            raise ValueError(f"Query failed. Error: {str(e)}\nResponse: {cleaned_response[:100]}...")
 
     def ai_assert(self, prompt: str) -> bool:
         """
@@ -321,7 +267,7 @@ No other text or explanation.
         logger.info(f"🪽 AI Assert: {prompt}")
         context = self._get_page_context()
         
-        # 优化提示，使其更简洁，更明确要求布尔值返回
+        # Optimize the prompt to be concise and explicitly require a boolean return
         assert_prompt = f"""
 You are a web automation assistant. Verify the following assertion and return ONLY a boolean value.
 
@@ -333,34 +279,28 @@ Assertion: {prompt}
 IMPORTANT: Return ONLY the word 'true' or 'false' (lowercase). No other text, no explanation.
 """
         
+        response = self.llm_client.complete(assert_prompt)
+        cleaned_response = self._clean_response(response).lower()
+        
         try:
-            # 缓存相同的断言结果
-            response = self.llm_client.complete(assert_prompt)
-            
-            # 简化响应处理
-            response = response.lower().strip()
-            
-            # 移除可能的markdown格式
-            response = response.replace('```', '').strip()
-            
-            # 直接匹配 true 或 false
-            if response == 'true':
+            # Directly match true or false
+            if cleaned_response == 'true':
                 return True
-            if response == 'false':
+            if cleaned_response == 'false':
                 return False
             
-            # 如果响应包含其他内容，尝试提取布尔值
-            if 'true' in response.split():
+            # If response contains other content, try extracting boolean
+            if 'true' in cleaned_response.split():
                 return True
-            if 'false' in response.split():
+            if 'false' in cleaned_response.split():
                 return False
             
             raise ValueError("Response must be 'true' or 'false'")
             
         except Exception as e:
-            # 提供更有用的错误信息
+            # Provide more useful error information
             raise ValueError(
-                f"Failed to parse assertion result. Response: {response[:100]}... "
+                f"Failed to parse assertion result. Response: {cleaned_response[:100]}... "
                 f"Error: {str(e)}"
             )
 
