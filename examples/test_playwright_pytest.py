@@ -47,9 +47,12 @@ def test_bing_search(page: Page, ai):
     page.wait_for_timeout(3000)
 
     items = ai.ai_query('string[], 搜索结果列表中包含"playwright"相关的标题')
-    print("query", items)
 
     assert len(items) > 1
 
     print("assert")
     assert ai.ai_assert('检查搜索结果列表第一条标题是否包含"playwright"字符串')
+
+
+if __name__ == '__main__':
+    pytest.main(["test_playwright_pytest.py", "-s"])

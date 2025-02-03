@@ -42,7 +42,6 @@ class TestBingSearch(unittest.TestCase):
         self.page.wait_for_timeout(3000)
 
         items = self.ai.ai_query('string[], 搜索结果列表中包含"playwright"相关的标题')
-        print("query", items)
 
         self.assertGreater(len(items), 1)
 
