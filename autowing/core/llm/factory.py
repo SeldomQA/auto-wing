@@ -4,6 +4,7 @@ from autowing.core.llm.base import BaseLLMClient
 from autowing.core.llm.openai_client import OpenAIClient
 from autowing.core.llm.qwen_client import QwenClient
 from autowing.core.llm.deepseek_client import DeepSeekClient
+from autowing.core.llm.doubao_client import DoubaoClient
 
 
 class LLMFactory:
@@ -15,7 +16,8 @@ class LLMFactory:
     _models = {
         'openai': OpenAIClient,
         'qwen': QwenClient,
-        'deepseek': DeepSeekClient
+        'deepseek': DeepSeekClient,
+        'doubao': DoubaoClient
     }
 
     @classmethod
