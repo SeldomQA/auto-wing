@@ -45,12 +45,20 @@ AUTOWING_MODEL_PROVIDER=deepseek
 DEEPSEEK_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789
 ```
 
-* 阿里云百练：https://bailian.console.aliyun.com/
+* 阿里云百练（千问）：https://bailian.console.aliyun.com/
 
 ```ini
 #.env
 AUTOWING_MODEL_PROVIDER=qwen
 DASHSCOPE_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789
+```
+
+* 火山方舟（豆包）：https://console.volcengine.com/
+
+```shell
+AUTOWING_MODEL_PROVIDER=doubao
+ARK_API_KEY=f61d2846-xxx-xxx-xxxx-xxxxxxxxxxxxx
+DOUBAO_MODEL_NAME=ep-20250207200649-xxx
 ```
 
 __方法二__
@@ -61,6 +69,7 @@ __方法二__
 export AUTOWING_MODEL_PROVIDER=deepseek
 export DEEPSEEK_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789
 ```
+> 其他LLM模型环境变量同样的方式配置。
 
 ### examples
 
