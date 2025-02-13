@@ -278,6 +278,118 @@ IMPORTANT: Return ONLY the word 'true' or 'false' (lowercase). No other text, no
         
         raise ValueError("Response must be 'true' or 'false'")
 
+    def ai_function_cases(self, prompt: str, language: str = "Chinese") -> str:
+        """
+        Generate functional test cases based on the given prompt.
+        
+        Args:
+            prompt (str): Natural language description of the functionality to test
+            language (str): Language in which the test cases should be generated
+        
+        Returns:
+            str: Generated test cases in a standard format
+        
+        Raises:
+            ValueError: If the AI response cannot be parsed or contains invalid instructions
+        """
+        logger.info(f"🪽 AI Function Case: {prompt}")
+        context = self._get_page_context()
+
+        format_hint = ""
+        if prompt.startswith(('json[]', 'markdown[]')):
+            format_hint = prompt.split(',')[0].strip()
+            prompt = ','.join(prompt.split(',')[1:]).strip()
+
+        # Provide different prompts based on the format
+        if format_hint == 'json[]':
+            # Construct the prompt for generating test cases
+            case_prompt = f"""
+You are a web automation assistant. Based on the following page context, generate functional test cases.
+
+Current page context:
+URL: {context['url']}
+Title: {context['title']}
+
+Available elements:
+{json.dumps(context['elements'], indent=2)}
+
+User request: {prompt}
+
+Return ONLY the test cases in the following format, no other text:
+[
+    {{
+      "Test Case ID": "001",
+      "Steps": "Describe the steps to perform the test without mentioning element locators.",
+      "Expected Result": "Describe the expected result."
+    }},
+    {{
+      "Test Case ID": "002",
+      "Steps": "Describe the steps to perform the test without mentioning element locators.",
+      "Expected Result": "Describe the expected result."
+    }}
+]
+...
+
+Finally, the output result is required to be in {language}
+"""
+        elif format_hint == 'markdown[]':
+            case_prompt = f"""
+You are a web automation assistant. Based on the following page context, generate functional test cases.
+
+Current page context:
+URL: {context['url']}
+Title: {context['title']}
+
+Available elements:
+{json.dumps(context['elements'], indent=2)}
+
+User request: {prompt}
+
+Return ONLY the test cases in the following format, no other text:
+| Test Case ID | Steps                                             | Expected Result               |
+|--------------|---------------------------------------------------|-------------------------------|
+| 001          | Describe the steps to perform the test without mentioning element locators. | Describe the expected result. |
+| 002          | Describe the steps to perform the test without mentioning element locators. | Describe the expected result. |
+...
+
+Finally, the output result is required to be in {language}
+"""
+        else:
+            case_prompt = f"""
+You are a web automation assistant. Based on the following page context, generate functional test cases.
+
+Current page context:
+URL: {context['url']}
+Title: {context['title']}
+
+Available elements:
+{json.dumps(context['elements'], indent=2)}
+
+User request: {prompt}
+
+Return ONLY the test cases in the following format, no other text:
+Test Case ID: 001
+Steps: Describe the steps to perform the test without mentioning element locators.
+Expected Result: Describe the expected result.
+
+Test Case ID: 002
+Steps: Describe the steps to perform the test without mentioning element locators.
+Expected Result: Describe the expected result.
+
+...
+
+Finally, the output result is required to be in {language}
+"""
+
+        try:
+            response = self.llm_client.complete(case_prompt)
+            cleaned_response = self._clean_response(response)
+
+            logger.debug(f"""📄 Function Cases:\n {cleaned_response}""")
+            return cleaned_response
+        except Exception as e:
+            raise ValueError(f"Failed to generate test cases. Error: {str(e)}\nResponse: {cleaned_response[:100]}...")
+
 
 def create_fixture():
     """
