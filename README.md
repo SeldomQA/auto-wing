@@ -11,19 +11,21 @@ auto-wing是一个利用LLM辅助自动化测试的工具, 为你的自动化测
 
 ⭐ 支持多种操作：`ai_action`、`ai_query`、`ai_assert`。
 
-⭐ 支持多模型：`openai`、`qwen` 和 `deepseek`。
+⭐ 支持多模型：`openai`、`deepseek`、`qwen` 和 `doubao`。
 
 ⭐ 支持 `playwright`、`selenium`。
 
 ⭐ 方便的和现有自动化项目（`pytest`、`unittest`）集成。
 
-### Install
+## Install
+
+* 支持pip安装，`python = "^3.9"`。
 
 ```shell
 pip install autowing
 ```
 
-### setting env
+## Setting Env
 
 __方法一__
 
@@ -71,7 +73,7 @@ export DEEPSEEK_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789
 ```
 > 其他LLM模型环境变量同样的方式配置。
 
-### examples
+## Examples
 
 👉 [查看 examples](./examples)
 
@@ -121,7 +123,7 @@ def test_bing_search(page: Page, ai):
     assert ai.ai_assert('检查搜索结果列表第一条标题是否包含"playwright"字符串')
 ```
 
-运行日志：
+* 运行日志：
 
 ```shell
 > pytest test_playwright_pytest.py -s
@@ -141,7 +143,7 @@ test_playwright_pytest.py 2025-02-04 10:00:30.961 | INFO     | autowing.playwrig
 ================================================= 1 passed in 27.99s ==================================================
 ```
 
-### Prompting Tips
+## Prompting Tips
 
 __1.提供更详细的描述以及样例__
 
