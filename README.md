@@ -6,16 +6,15 @@
 
 auto-wing是一个利用LLM辅助自动化测试的工具, 为你的自动化测试插上翅膀。
 
-
 ### Features
 
-⭐ 支持多种操作：`ai_action`、`ai_query`、`ai_assert`。
+⭐ 集成 `playwright`、`selenium`、`appium`，支持`Web UI`和`App UI`的`AI`操作。
 
 ⭐ 支持多模型：`openai`、`deepseek`、`qwen` 和 `doubao`。
 
-⭐ 支持 `playwright`、`selenium`。
+⭐ 支持多种操作：`ai_action`、`ai_query`、`ai_assert`。
 
-⭐ 方便的和现有自动化项目（`pytest`、`unittest`）集成。
+⭐ 无痛的集成到现有自动化项目（`pytest`、`unittest`）中。
 
 ## Install
 
@@ -35,29 +34,30 @@ __方法一__
 
 ```ini
 #.env
-AUTOWING_MODEL_PROVIDER=openai
-OPENAI_API_KEY==sk-proj-abdefghijklmnopqrstwvwxyz0123456789
+AUTOWING_MODEL_PROVIDER = openai
+OPENAI_API_KEY = =sk-proj-abdefghijklmnopqrstwvwxyz0123456789
 ```
 
 * DeepSeek: https://platform.deepseek.com/
 
 ```ini
 #.env
-AUTOWING_MODEL_PROVIDER=deepseek
-DEEPSEEK_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789
+AUTOWING_MODEL_PROVIDER = deepseek
+DEEPSEEK_API_KEY = sk-abdefghijklmnopqrstwvwxyz0123456789
 ```
 
 * 阿里云百练（千问）：https://bailian.console.aliyun.com/
 
 ```ini
 #.env
-AUTOWING_MODEL_PROVIDER=qwen
-DASHSCOPE_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789
+AUTOWING_MODEL_PROVIDER = qwen
+DASHSCOPE_API_KEY = sk-abdefghijklmnopqrstwvwxyz0123456789
 ```
 
 * 火山方舟（豆包）：https://console.volcengine.com/
 
 ```shell
+#.env
 AUTOWING_MODEL_PROVIDER=doubao
 ARK_API_KEY=f61d2846-xxx-xxx-xxxx-xxxxxxxxxxxxx
 DOUBAO_MODEL_NAME=ep-20250207200649-xxx
@@ -71,6 +71,7 @@ __方法二__
 export AUTOWING_MODEL_PROVIDER=deepseek
 export DEEPSEEK_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789
 ```
+
 > 其他LLM模型环境变量同样的方式配置。
 
 ## Examples
@@ -163,11 +164,13 @@ __2.一个 Prompt (指令)只做一件事__
 
 错误示例 ❌:`"点击登录按钮，然后点击注册按钮，在表单中输入'test@test.com'作为邮箱，'test'作为密码，然后点击注册按钮"`
 
-正确示例 ✅: `将任务分解为三个步骤："点击登录按钮" "点击注册按钮" "在表单中输入'test@test.com'作为邮箱，'test'作为密码，然后点击注册按钮"`
+正确示例
+✅: `将任务分解为三个步骤："点击登录按钮" "点击注册按钮" "在表单中输入'test@test.com'作为邮箱，'test'作为密码，然后点击注册按钮"`
 
 __3.从界面做推断，而不是 DOM 属性或者浏览器状态__
 
-所有传递给 LLM 的数据都是截图和元素坐标。DOM和浏览器 对 LLM 来说几乎是不可见的。因此，务必确保你想提取的信息都在截图中有所体现且能被 LLM “看到”。
+所有传递给 LLM 的数据都是截图和元素坐标。DOM和浏览器 对 LLM 来说几乎是不可见的。因此，务必确保你想提取的信息都在截图中有所体现且能被
+LLM “看到”。
 
 正确示例 ✅：`标题是蓝色的`
 
