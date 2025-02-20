@@ -1,5 +1,8 @@
 import os
 from typing import Type
+
+from loguru import logger
+
 from autowing.core.llm.base import BaseLLMClient
 from autowing.core.llm.openai_client import OpenAIClient
 from autowing.core.llm.qwen_client import QwenClient
@@ -34,6 +37,8 @@ class LLMFactory:
         model_name = os.getenv("AUTOWING_MODEL_PROVIDER", "deepseek").lower()
         if model_name not in cls._models:
             raise ValueError(f"Unsupported model provider: {model_name}")
+
+        logger.info(f"🤖 AUTOWING_MODEL_PROVIDER={model_name}")
 
         model_class = cls._models[model_name]
         return model_class()
