@@ -4,10 +4,10 @@ from typing import Type
 from loguru import logger
 
 from autowing.core.llm.base import BaseLLMClient
-from autowing.core.llm.openai_client import OpenAIClient
-from autowing.core.llm.qwen_client import QwenClient
-from autowing.core.llm.deepseek_client import DeepSeekClient
-from autowing.core.llm.doubao_client import DoubaoClient
+from autowing.core.llm.client.deepseek import DeepSeekClient
+from autowing.core.llm.client.doubao import DoubaoClient
+from autowing.core.llm.client.openai import OpenAIClient
+from autowing.core.llm.client.qwen import QwenClient
 
 
 class LLMFactory:
@@ -42,7 +42,7 @@ class LLMFactory:
 
         model_class = cls._models[model_name]
         return model_class()
-    
+
     @classmethod
     def register_model(cls, name: str, model_class: Type[BaseLLMClient]) -> None:
         """
@@ -52,4 +52,4 @@ class LLMFactory:
             name (str): The name to register the model under
             model_class (Type[BaseLLMClient]): The class implementing the BaseLLMClient interface
         """
-        cls._models[name.lower()] = model_class 
+        cls._models[name.lower()] = model_class
