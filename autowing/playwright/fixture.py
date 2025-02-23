@@ -1,9 +1,11 @@
-from typing import Any, Dict
 import json
-from playwright.sync_api import Page
-from autowing.core.llm.factory import LLMFactory
-from autowing.core.ai_fixture_base import AiFixtureBase
+from typing import Any, Dict
+
 from loguru import logger
+from playwright.sync_api import Page
+
+from autowing.core.ai_fixture_base import AiFixtureBase
+from autowing.core.llm.factory import LLMFactory
 
 
 class PlaywrightAiFixture(AiFixtureBase):
@@ -36,7 +38,7 @@ class PlaywrightAiFixture(AiFixtureBase):
             "url": self.page.url,
             "title": self.page.title()
         }
-        
+
         # Get key elements info
         elements_info = self.page.evaluate("""() => {
             const getVisibleElements = () => {
@@ -67,12 +69,12 @@ class PlaywrightAiFixture(AiFixtureBase):
             };
             return getVisibleElements();
         }""")
-        
+
         return {
             **basic_info,
             "elements": elements_info
         }
-        
+
     def ai_action(self, prompt: str) -> None:
         """
         Execute an AI-driven action on the page based on the given prompt.
@@ -87,7 +89,7 @@ class PlaywrightAiFixture(AiFixtureBase):
         """
         logger.info(f"🪽 AI Action: {prompt}")
         context = self._get_page_context()
-        
+
         # Construct the prompt, explicitly requiring a JSON response
         action_prompt = f"""
 You are a web automation assistant. Based on the following page context, provide instructions for the requested action.
@@ -117,17 +119,17 @@ Example response:
     "key": "Enter"
 }}
 """
-        
+
         response = self.llm_client.complete(action_prompt)
         cleaned_response = self._clean_response(response)
         try:
             instruction = json.loads(cleaned_response)
             selector = instruction.get('selector')
             action = instruction.get('action')
-            
+
             if not selector or not action:
                 raise ValueError("Invalid instruction format")
-                
+
             # Perform the action
             element = self.page.locator(selector)
             if action == 'click':
@@ -140,10 +142,10 @@ Example response:
                 element.press(instruction.get('key', 'Enter'))
             else:
                 raise ValueError(f"Unsupported action: {action}")
-                
+
         except json.JSONDecodeError:
             raise ValueError(f"Failed to parse instruction: {cleaned_response}")
-            
+
     def ai_query(self, prompt: str) -> Any:
         """
         Query information from the page using AI analysis.
@@ -161,7 +163,7 @@ Example response:
         """
         logger.info(f"🪽 AI Query: {prompt}")
         context = self._get_page_context()
-        
+
         # Parse the requested data format
         format_hint = ""
         if prompt.startswith(('string[]', 'number[]', 'object[]')):
@@ -221,13 +223,13 @@ No other text or explanation.
                 # If it's a string array format, try extracting from text
                 if format_hint == 'string[]':
                     # Split and clean text
-                    lines = [line.strip() for line in cleaned_response.split('\n') 
-                            if line.strip() and not line.startswith(('-', '*', '#'))]
-                    
+                    lines = [line.strip() for line in cleaned_response.split('\n')
+                             if line.strip() and not line.startswith(('-', '*', '#'))]
+
                     # Extract lines containing query terms
-                    query_terms = [term.lower() for term in prompt.split() 
-                                 if len(term) > 2 and term.lower() not in ['the', 'and', 'for']]
-                    
+                    query_terms = [term.lower() for term in prompt.split()
+                                   if len(term) > 2 and term.lower() not in ['the', 'and', 'for']]
+
                     results = []
                     for line in lines:
                         # Check if line contains query terms
@@ -238,16 +240,16 @@ No other text or explanation.
                                 text = text.split(':', 1)[1].strip()
                             if text:
                                 results.append(text)
-                    
+
                     if results:
                         # Remove duplicates while preserving order
                         seen = set()
                         query_info = [x for x in results if not (x in seen or seen.add(x))]
                         logger.debug(f"📄 Query: {query_info}")
                         return query_info
-                
+
                 raise ValueError(f"Failed to parse response as JSON: {cleaned_response[:100]}...")
-            
+
         except Exception as e:
             raise ValueError(f"Query failed. Error: {str(e)}\nResponse: {cleaned_response[:100]}...")
 
@@ -266,7 +268,7 @@ No other text or explanation.
         """
         logger.info(f"🪽 AI Assert: {prompt}")
         context = self._get_page_context()
-        
+
         # Optimize the prompt to be concise and explicitly require a boolean return
         assert_prompt = f"""
 You are a web automation assistant. Verify the following assertion and return ONLY a boolean value.
@@ -278,25 +280,25 @@ Assertion: {prompt}
 
 IMPORTANT: Return ONLY the word 'true' or 'false' (lowercase). No other text, no explanation.
 """
-        
+
         response = self.llm_client.complete(assert_prompt)
         cleaned_response = self._clean_response(response).lower()
-        
+
         try:
             # Directly match true or false
             if cleaned_response == 'true':
                 return True
             if cleaned_response == 'false':
                 return False
-            
+
             # If response contains other content, try extracting boolean
             if 'true' in cleaned_response.split():
                 return True
             if 'false' in cleaned_response.split():
                 return False
-            
+
             raise ValueError("Response must be 'true' or 'false'")
-            
+
         except Exception as e:
             # Provide more useful error information
             raise ValueError(
