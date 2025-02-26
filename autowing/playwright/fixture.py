@@ -44,8 +44,18 @@ class PlaywrightAiFixture(AiFixtureBase):
             const getVisibleElements = () => {
                 const elements = [];
                 const selectors = [
-                    'input', 'button', 'a', '[role="button"]',
-                    '[role="link"]', '[role="searchbox"]', 'textarea'
+                    'input',        // input
+                    'textarea',     // input
+                    'select',       // input/click
+                    'button',       // click
+                    'a',            // click
+                    '[role="button"]',   // click
+                    '[role="link"]',     // click
+                    '[role="checkbox"]', // click
+                    '[role="radio"]',    // click
+                    '[role="searchbox"]', // input
+                    'summary',      // click（<details> ）
+                    '[draggable="true"]'  // draggable
                 ];
                 
                 for (const selector of selectors) {
@@ -53,14 +63,15 @@ class PlaywrightAiFixture(AiFixtureBase):
                         if (el.offsetWidth > 0 && el.offsetHeight > 0) {
                             elements.push({
                                 tag: el.tagName.toLowerCase(),
-                                type: el.getAttribute('type'),
-                                placeholder: el.getAttribute('placeholder'),
-                                value: el.value,
-                                text: el.textContent?.trim(),
-                                aria: el.getAttribute('aria-label'),
-                                id: el.id,
-                                name: el.getAttribute('name'),
-                                class: el.className
+                                type: el.getAttribute('type') || null,
+                                placeholder: el.getAttribute('placeholder') || null,
+                                value: el.value || null,
+                                text: el.textContent?.trim() || '',
+                                aria: el.getAttribute('aria-label') || null,
+                                id: el.id || '',
+                                name: el.getAttribute('name') || null,
+                                class: el.className || '',
+                                draggable: el.getAttribute('draggable') || null
                             });
                         }
                     });
@@ -164,6 +175,7 @@ Example response:
         """
         logger.info(f"🪽 AI Query: {prompt}")
         context = self._get_page_context()
+        context["elements"] = self._remove_empty_keys(context.get("elements", []))
 
         # Parse the requested data format
         format_hint = ""
@@ -269,6 +281,7 @@ No other text or explanation.
         """
         logger.info(f"🪽 AI Assert: {prompt}")
         context = self._get_page_context()
+        context["elements"] = self._remove_empty_keys(context.get("elements", []))
 
         # Optimize the prompt to be concise and explicitly require a boolean return
         assert_prompt = f"""
