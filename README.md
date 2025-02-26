@@ -35,7 +35,7 @@ __方法一__
 ```ini
 #.env
 AUTOWING_MODEL_PROVIDER = openai
-OPENAI_API_KEY = =sk-proj-abdefghijklmnopqrstwvwxyz0123456789
+OPENAI_API_KEY = sk-proj-abdefghijklmnopqrstwvwxyz0123456789
 ```
 
 * DeepSeek: https://platform.deepseek.com/
