@@ -89,6 +89,7 @@ class PlaywrightAiFixture(AiFixtureBase):
         """
         logger.info(f"🪽 AI Action: {prompt}")
         context = self._get_page_context()
+        context["elements"] = self._remove_empty_keys(context.get("elements", []))
 
         # Construct the prompt, explicitly requiring a JSON response
         action_prompt = f"""

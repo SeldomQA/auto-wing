@@ -7,6 +7,21 @@ class AiFixtureBase:
     shared between Playwright and Selenium fixtures.
     """
 
+    def _remove_empty_keys(self, dict_list: list) -> list:
+        """
+        remove element keys, Reduce tokens use.
+        :return:
+        """
+        if not dict_list:
+            return []
+
+        new_list = []
+        for d in dict_list:
+            new_dict = {k: v for k, v in d.items() if v != '' and v is not None}
+            new_list.append(new_dict)
+ 
+        return new_list
+
     def _clean_response(self, response: str) -> str:
         """
         Clean the response text by stripping markdown formatting.
@@ -68,4 +83,4 @@ class AiFixtureBase:
                 raise ValueError(f"Not all items are objects: {result}")
             return result
 
-        return result 
+        return result

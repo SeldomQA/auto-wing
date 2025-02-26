@@ -94,6 +94,7 @@ class SeleniumAiFixture(AiFixtureBase):
         """
         logger.info(f"🪽 AI Action: {prompt}")
         context = self._get_page_context()
+        context["elements"] = self._remove_empty_keys(context.get("elements", []))
 
         action_prompt = f"""
 Extract element locator and action from the request. Return ONLY a JSON object.
