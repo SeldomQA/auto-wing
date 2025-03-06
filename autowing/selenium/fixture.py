@@ -121,8 +121,16 @@ Return format:
     "value": "text to input if needed",
     "key": "key to press if needed"
 }}
+Note: selector is used for a selenium location, for example：find_element(By.CSS_SELECTOR, selector)
 
-No other text or explanation.
+Example response:
+{{
+    "selector": "input[id='search-input']",
+    "action": "fill",
+    "value": "search text",
+    "key": "Enter"
+}}
+Note: The CSS selector the tag name (input/button/select...).
 """
 
         response = self.llm_client.complete(action_prompt)

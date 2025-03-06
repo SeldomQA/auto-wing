@@ -122,14 +122,16 @@ Return ONLY a JSON object with the following structure, no other text:
     "value": "text to input",
     "key": "key to press if needed"
 }}
+Note: selector is used for a playwright location, for example：page.locator(selector)
 
 Example response:
 {{
-    "selector": "#search-input",
+    "selector": "input[id='search-input']",
     "action": "fill",
     "value": "search text",
     "key": "Enter"
 }}
+Note: The CSS selector the tag name (input/button/select...).
 """
 
         response = self.llm_client.complete(action_prompt)
