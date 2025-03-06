@@ -116,21 +116,20 @@ Request: {prompt}
 
 Return format:
 {{
-    "selector": "CSS selector to locate the element",
+    "selector": "XPATH selector to locate the element",
     "action": "click/fill/press",
     "value": "text to input if needed",
     "key": "key to press if needed"
 }}
-Note: selector is used for a selenium location, for example：find_element(By.CSS_SELECTOR, selector)
+Note: selector is used for a selenium location, for example：find_element(By.XPATH, selector)
 
 Example response:
 {{
-    "selector": "input[id='search-input']",
+    "selector": "//input[@id='search-input']",
     "action": "fill",
     "value": "search text",
     "key": "Enter"
 }}
-Note: The CSS selector the tag name (input/button/select...).
 """
 
         response = self.llm_client.complete(action_prompt)
@@ -144,7 +143,7 @@ Note: The CSS selector the tag name (input/button/select...).
             raise ValueError("Invalid instruction format")
 
         # Execute the action
-        element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+        element = self.wait.until(EC.presence_of_element_located((By.XPATH, selector)))
 
         if action == 'click':
             element.click()

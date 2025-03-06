@@ -86,13 +86,14 @@ class PlaywrightAiFixture(AiFixtureBase):
             "elements": elements_info
         }
 
-    def ai_action(self, prompt: str) -> None:
+    def ai_action(self, prompt: str, iframe=None) -> None:
         """
         Execute an AI-driven action on the page based on the given prompt.
         The AI will analyze the page context and perform the requested action.
 
         Args:
             prompt (str): Natural language description of the action to perform
+            iframe: FrameLocator object
 
         Raises:
             ValueError: If the AI response cannot be parsed or contains invalid instructions
@@ -146,6 +147,9 @@ Note: The CSS selector the tag name (input/button/select...).
 
             # Perform the action
             element = self.page.locator(selector)
+            if iframe is not None:
+                element = iframe.locator(selector)
+
             if action == 'click':
                 element.click()
             elif action == 'fill':
