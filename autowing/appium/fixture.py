@@ -12,20 +12,38 @@ from autowing.core.ai_fixture_base import AiFixtureBase
 from autowing.core.llm.factory import LLMFactory
 
 
+def bounds(x, y, width, height) -> list:
+    """
+    return element bounds
+    :param x:
+    :param y:
+    :param width:
+    :param height:
+    :return:
+    """
+    x_start = int(x)
+    y_start = int(y)
+    x_end = x_start + int(width)
+    y_end = y_start + int(height)
+    return [[x_start, x_end], [y_start, y_end]]
+
+
 class AppiumAiFixture(AiFixtureBase):
     """
     A fixture class that combines Appium with AI capabilities for mobile automation.
     Provides AI-driven interaction with mobile apps using various LLM providers.
     """
 
-    def __init__(self, driver: WebDriver):
+    def __init__(self, driver: WebDriver, platform: str = "Android"):
         """
         Initialize the AI-powered Appium fixture.
 
         Args:
             driver (WebDriver): The Appium WebDriver instance to automate
+            platform: Mobile operating system platform
         """
         self.driver = driver
+        self.platform = platform
         self.llm_client = LLMFactory.create()
         self.wait = WebDriverWait(self.driver, 10)  # Default timeout of 10 seconds
 
@@ -45,17 +63,37 @@ class AppiumAiFixture(AiFixtureBase):
 
         # Get key elements info using Appium
         elements_info = []
-        elements = self.driver.find_elements(AppiumBy.XPATH, "//*")
-        for el in elements:
-            if el.is_displayed():
-                elements_info.append({
-                    "tag": el.tag_name,
-                    "text": el.text,
-                    "resource_id": el.get_attribute("resource-id"),
-                    "content_desc": el.get_attribute("content-desc"),
-                    "class": el.get_attribute("class"),
-                    "bounds": el.get_attribute("bounds")
-                })
+        if self.platform == "Android":
+            elements = self.driver.find_elements(AppiumBy.XPATH, "//*")
+            for el in elements:
+                if el.is_displayed():
+                    elements_info.append({
+                        "tag": el.tag_name,
+                        "text": el.text,
+                        "resource_id": el.get_attribute("resource-id"),
+                        "content_desc": el.get_attribute("content-desc"),
+                        "class": el.get_attribute("class"),
+                        "bounds": el.get_attribute("bounds")
+                    })
+        elif self.platform == "iOS":
+            elements = self.driver.find_elements(AppiumBy.IOS_PREDICATE, "type == '*'")
+            for el in elements:
+                if el.is_displayed():
+                    elements_info.append({
+                        "tag": el.tag_name,
+                        "text": el.text,
+                        "type": el.get_attribute("type"),
+                        "name": el.get_attribute("name"),
+                        "label": el.get_attribute("label"),
+                        "enabled": el.get_attribute("enabled"),
+                        "visible": el.get_attribute("visible"),
+                        "bounds": bounds(el.get_attribute("x"),
+                                         el.get_attribute("y"),
+                                         el.get_attribute("width"),
+                                         el.get_attribute("height")),
+                    })
+        else:
+            raise NameError(f"Unsupported {self.platform} platform.")
 
         return {
             **basic_info,
