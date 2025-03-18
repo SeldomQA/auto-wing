@@ -38,7 +38,7 @@ def ai(driver):
     Create an AI-powered Selenium fixture.
     """
     ai_fixture = create_fixture()
-    return ai_fixture(driver)
+    return ai_fixture(driver, "Android")
 
 
 def test_bing_search(ai, driver):
