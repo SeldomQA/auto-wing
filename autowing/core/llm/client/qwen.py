@@ -29,7 +29,7 @@ class QwenClient(BaseLLMClient):
 
         # 使用兼容模式的 URL
         self.base_url = os.getenv("OPENAI_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-        self.model_name = os.getenv("MIDSCENE_MODEL_NAME", "qwen-vl-max-latest")
+        self.model_name = os.getenv("MIDSCENE_MODEL_NAME", "qwen2.5-14b-instruct-1m")
 
         # 使用 OpenAI 客户端，但配置为千问的 URL
         self.client = OpenAI(
