@@ -21,6 +21,7 @@ class PlaywrightAiFixture(AiFixtureBase):
         Args:
             page (Page): The Playwright page object to automate
         """
+        super().__init__()
         self.page = page
         self.llm_client = LLMFactory.create()
 
@@ -103,8 +104,8 @@ class PlaywrightAiFixture(AiFixtureBase):
         context = self._get_page_context()
         context["elements"] = self._remove_empty_keys(context.get("elements", []))
 
-        # Construct the prompt, explicitly requiring a JSON response
-        action_prompt = f"""
+        def compute_action():
+            action_prompt = f"""
 You are a web automation assistant. Based on the following page context, provide instructions for the requested action.
 
 Current page context:
@@ -133,36 +134,35 @@ Example response:
     "key": "Enter"
 }}
 Note: The CSS selector the tag name (input/button/select...).
-"""
+            """
+            response = self.llm_client.complete(action_prompt)
+            cleaned_response = self._clean_response(response)
+            return json.loads(cleaned_response)
 
-        response = self.llm_client.complete(action_prompt)
-        cleaned_response = self._clean_response(response)
-        try:
-            instruction = json.loads(cleaned_response)
-            selector = instruction.get('selector')
-            action = instruction.get('action')
+        # Use cache manager to get or compute the instruction
+        instruction = self._get_cached_or_compute(prompt, context, compute_action)
+        # Execute the action using the instruction
+        selector = instruction.get('selector')
+        action = instruction.get('action')
 
-            if not selector or not action:
-                raise ValueError("Invalid instruction format")
+        if not selector or not action:
+            raise ValueError("Invalid instruction format")
 
-            # Perform the action
-            element = self.page.locator(selector)
-            if iframe is not None:
-                element = iframe.locator(selector)
+        # Perform the action
+        element = self.page.locator(selector)
+        if iframe is not None:
+            element = iframe.locator(selector)
 
-            if action == 'click':
-                element.click()
-            elif action == 'fill':
-                element.fill(instruction.get('value', ''))
-                if instruction.get('key'):
-                    element.press(instruction.get('key'))
-            elif action == 'press':
-                element.press(instruction.get('key', 'Enter'))
-            else:
-                raise ValueError(f"Unsupported action: {action}")
-
-        except json.JSONDecodeError:
-            raise ValueError(f"Failed to parse instruction: {cleaned_response}")
+        if action == 'click':
+            element.click()
+        elif action == 'fill':
+            element.fill(instruction.get('value', ''))
+            if instruction.get('key'):
+                element.press(instruction.get('key'))
+        elif action == 'press':
+            element.press(instruction.get('key', 'Enter'))
+        else:
+            raise ValueError(f"Unsupported action: {action}")
 
     def ai_query(self, prompt: str) -> Any:
         """
@@ -230,7 +230,7 @@ No other text or explanation.
 """
 
         response = self.llm_client.complete(query_prompt)
-        cleaned_response = self._clean_response(response)
+
         try:
             cleaned_response = self._clean_response(response)
             try:

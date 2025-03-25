@@ -2,6 +2,7 @@ import json
 from typing import Any, Dict
 
 from loguru import logger
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -26,6 +27,7 @@ class SeleniumAiFixture(AiFixtureBase):
         Args:
             driver (WebDriver): The Selenium WebDriver instance to automate
         """
+        super().__init__()
         self.driver = driver
         self.llm_client = LLMFactory.create()
         self.wait = WebDriverWait(self.driver, 10)  # Default timeout of 10 seconds
@@ -107,7 +109,8 @@ class SeleniumAiFixture(AiFixtureBase):
         context = self._get_page_context()
         context["elements"] = self._remove_empty_keys(context.get("elements", []))
 
-        action_prompt = f"""
+        def compute_action():
+            action_prompt = f"""
 Extract element locator and action from the request. Return ONLY a JSON object.
 
 Page: {context['url']}
@@ -132,10 +135,14 @@ Example response:
 }}
 """
 
-        response = self.llm_client.complete(action_prompt)
-        cleaned_response = self._clean_response(response)
-        instruction = json.loads(cleaned_response)
+            response = self.llm_client.complete(action_prompt)
+            cleaned_response = self._clean_response(response)
+            return json.loads(cleaned_response)
 
+        # Use cache manager to get or compute the instruction
+        instruction = self._get_cached_or_compute(prompt, context, compute_action)
+        logger.debug(instruction)
+        # Execute the action using the instruction
         selector = instruction.get('selector')
         action = instruction.get('action')
 
@@ -143,7 +150,10 @@ Example response:
             raise ValueError("Invalid instruction format")
 
         # Execute the action
-        element = self.wait.until(EC.presence_of_element_located((By.XPATH, selector)))
+        try:
+            element = self.wait.until(EC.presence_of_element_located((By.XPATH, selector)))
+        except TimeoutException:
+            element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
 
         if action == 'click':
             element.click()
