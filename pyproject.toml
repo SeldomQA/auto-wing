@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "autowing"
-version = "0.5.1"
+version = "0.6.0"
 description = "auto-wing is a tool that uses LLM to assist automated testing."
 authors = ["defnngj <defnngj@gmail.com>"]
 readme = "README.md"
