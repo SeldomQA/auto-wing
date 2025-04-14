@@ -11,6 +11,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from autowing.core.ai_fixture_base import AiFixtureBase
 from autowing.core.llm.factory import LLMFactory
+from autowing.utils.transition import selector_to_selenium
 
 
 class SeleniumAiFixture(AiFixtureBase):
@@ -141,7 +142,6 @@ Example response:
 
         # Use cache manager to get or compute the instruction
         instruction = self._get_cached_or_compute(prompt, context, compute_action)
-        logger.debug(instruction)
         # Execute the action using the instruction
         selector = instruction.get('selector')
         action = instruction.get('action')
@@ -150,6 +150,9 @@ Example response:
             raise ValueError("Invalid instruction format")
 
         # Execute the action
+        print(selector)
+        selector = selector_to_selenium(selector)
+        print(selector)
         try:
             element = self.wait.until(EC.presence_of_element_located((By.XPATH, selector)))
         except TimeoutException:

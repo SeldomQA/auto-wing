@@ -6,6 +6,7 @@ from playwright.sync_api import Page
 
 from autowing.core.ai_fixture_base import AiFixtureBase
 from autowing.core.llm.factory import LLMFactory
+from autowing.utils.transition import selector_to_locator
 
 
 class PlaywrightAiFixture(AiFixtureBase):
@@ -128,7 +129,7 @@ Note: selector is used for a playwright location, for example：page.locator(sel
 
 Example response:
 {{
-    "selector": "input[id='search-input']",
+    "selector": "//input[id='search-input']",
     "action": "fill",
     "value": "search text",
     "key": "Enter"
@@ -149,6 +150,7 @@ Note: The CSS selector the tag name (input/button/select...).
             raise ValueError("Invalid instruction format")
 
         # Perform the action
+        selector = selector_to_locator(selector)
         element = self.page.locator(selector)
         if iframe is not None:
             element = iframe.locator(selector)
