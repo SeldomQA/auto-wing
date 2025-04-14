@@ -14,11 +14,13 @@ auto-wing是一个利用LLM辅助自动化测试的工具, 为你的自动化测
 
 ⭐ 支持多种操作：`ai_action`、`ai_query`、`ai_assert`。
 
+⭐ 默认支持缓存：首次执行AI任务会被缓存，后续执行相同的任务可以提升效率。
+
 ⭐ 无痛的集成到现有自动化项目（`pytest`、`unittest`）中。
 
 ## Install
 
-* 支持pip安装，`python = "^3.9"`。
+* 支持pip安装，`python >= 3.9`。
 
 ```shell
 pip install autowing
@@ -56,11 +58,11 @@ DASHSCOPE_API_KEY = sk-abdefghijklmnopqrstwvwxyz0123456789
 
 * 火山方舟（豆包）：https://console.volcengine.com/
 
-```shell
+```ini
 #.env
-AUTOWING_MODEL_PROVIDER=doubao
-ARK_API_KEY=f61d2846-xxx-xxx-xxxx-xxxxxxxxxxxxx
-DOUBAO_MODEL_NAME=ep-20250207200649-xxx
+AUTOWING_MODEL_PROVIDER = doubao
+ARK_API_KEY = f61d2846-xxx-xxx-xxxx-xxxxxxxxxxxxx
+DOUBAO_MODEL_NAME = ep-20250207200649-xxx
 ```
 
 __方法二__
