@@ -10,7 +10,7 @@ python = "^3.9"
 openai = "^1.60.1"
 dashscope = "^1.22.1"
 pytest-playwright = "^0.6.2"
-appium-python-client = "^4.5.0"
+appium-python-client = "^5.1.0"
 python-dotenv = "^1.0.1"
 loguru = "^0.7.3"
 
