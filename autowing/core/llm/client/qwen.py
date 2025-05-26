@@ -2,9 +2,8 @@ import json
 import os
 from typing import Optional, Dict, Any, List
 
-from openai import OpenAI
-
 from autowing.core.llm.base import BaseLLMClient
+from openai import OpenAI
 
 
 class QwenClient(BaseLLMClient):
@@ -29,7 +28,7 @@ class QwenClient(BaseLLMClient):
 
         # 使用兼容模式的 URL
         self.base_url = os.getenv("OPENAI_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-        self.model_name = os.getenv("MIDSCENE_MODEL_NAME", "qwen2.5-14b-instruct-1m")
+        self.model_name = os.getenv("MIDSCENE_MODEL_NAME", "qwen3-235b-a22b")
 
         # 使用 OpenAI 客户端，但配置为千问的 URL
         self.client = OpenAI(
