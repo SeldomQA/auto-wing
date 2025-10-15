@@ -1,19 +1,26 @@
-[tool.poetry]
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[project]
 name = "autowing"
 version = "0.6.1"
 description = "auto-wing is a tool that uses LLM to assist automated testing."
-authors = ["defnngj <defnngj@gmail.com>"]
 readme = "README.md"
+authors = [
+    { name = "defnngj", email = "defnngj@gmail.com" }
+]
+requires-python = ">=3.9"
 
-[tool.poetry.dependencies]
-python = "^3.9"
-openai = "^1.60.1"
-dashscope = "^1.22.1"
-pytest-playwright = "^0.6.2"
-appium-python-client = "^5.1.0"
-python-dotenv = "^1.0.1"
-loguru = "^0.7.3"
+dependencies = [
+    "openai>=1.60.1,<2.0.0",
+    "dashscope>=1.22.1,<2.0.0",
+    "pytest-playwright>=0.6.2,<0.7.0",
+    "appium-python-client>=5.1.0,<6.0.0",
+    "python-dotenv>=1.0.1,<2.0.0",
+    "loguru>=0.7.3,<0.8.0",
+]
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[project.urls]
+repository = "https://github.com/SeldomQA/auto-wing"
+homepage = "https://github.com/SeldomQA/auto-wing"
