@@ -24,13 +24,11 @@ class QwenClient(BaseLLMClient):
         """
         self.api_key = api_key or os.getenv("DASHSCOPE_API_KEY")
         if not self.api_key:
-            raise ValueError("DashScope API key is required")
+            raise ValueError("Please set the env variable `DASHSCOPE_API_KEY`")
 
-        # 使用兼容模式的 URL
         self.base_url = os.getenv("OPENAI_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-        self.model_name = os.getenv("MIDSCENE_MODEL_NAME", "qwen3-235b-a22b")
+        self.model_name = os.getenv("MIDSCENE_MODEL_NAME", "qwen3-max")
 
-        # 使用 OpenAI 客户端，但配置为千问的 URL
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url
