@@ -150,9 +150,7 @@ Example response:
             raise ValueError("Invalid instruction format")
 
         # Execute the action
-        print(selector)
         selector = selector_to_selenium(selector)
-        print(selector)
         try:
             element = self.wait.until(EC.presence_of_element_located((By.XPATH, selector)))
         except TimeoutException:
