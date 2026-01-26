@@ -20,10 +20,19 @@ auto-wing是一个利用LLM辅助自动化测试的工具, 为你的自动化测
 
 ## Install
 
-* 支持pip安装，`python >= 3.9`。
+* 支持pip安装，`python >= 3.10`。
 
 ```shell
 pip install autowing
+
+# playwright [optional]
+pip install pytest-playwright
+
+# selenium [optional]
+pip install selenium [optional]
+
+# appium [optional]
+pip install appium-python-client [optional] 
 ```
 
 ## Setting Env
@@ -82,28 +91,16 @@ export DEEPSEEK_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789
 
 ```python
 import pytest
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page
 from autowing.playwright.fixture import create_fixture
 from dotenv import load_dotenv
-
-
-@pytest.fixture(scope="session")
-def page():
-    """playwright page fixture"""
-    # load .env file config
-    load_dotenv()
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
-        yield page
-        context.close()
-        browser.close()
 
 
 @pytest.fixture
 def ai(page):
     """ai fixture"""
+    # load .env file config
+    load_dotenv()
     ai_fixture = create_fixture()
     return ai_fixture(page)
 
