@@ -2,26 +2,10 @@
 pytest example for Playwright with AI automation.
 """
 import pytest
-from playwright.sync_api import Page, sync_playwright
-from autowing.playwright.fixture import create_fixture
-
 from dotenv import load_dotenv
+from playwright.sync_api import Page
 
-
-@pytest.fixture(scope="session")
-def page():
-    """
-    playwright fixture
-    """
-    # loading .env file
-    load_dotenv()
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
-        yield page
-        context.close()
-        browser.close()
+from autowing.playwright.fixture import create_fixture
 
 
 @pytest.fixture
@@ -29,6 +13,9 @@ def ai(page):
     """
     ai fixture
     """
+    # loading .env file
+    load_dotenv()
+
     ai_fixture = create_fixture()
     return ai_fixture(page)
 
