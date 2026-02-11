@@ -2,9 +2,11 @@
 Unittest example for Playwright with AI automation.
 """
 import unittest
-from playwright.sync_api import sync_playwright
-from autowing.playwright.fixture import create_fixture
+
 from dotenv import load_dotenv
+from playwright.sync_api import sync_playwright
+
+from autowing.playwright import create_fixture
 
 
 class TestBingSearch(unittest.TestCase):

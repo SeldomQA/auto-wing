@@ -5,7 +5,7 @@ from appium import webdriver
 from appium.options.android import UiAutomator2Options
 from dotenv import load_dotenv
 
-from autowing.appium.fixture import create_fixture
+from autowing.appium import create_fixture
 
 
 @pytest.fixture(scope="function")

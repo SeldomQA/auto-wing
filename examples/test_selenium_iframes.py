@@ -16,7 +16,10 @@ def driver():
 
     load_dotenv()
 
-    driver = webdriver.Edge()
+    options = webdriver.ChromeOptions()
+    options.add_argument('--disable-web-security')
+    options.add_argument('--headless=new')
+    driver = webdriver.Chrome(options=options)
 
     yield driver
 

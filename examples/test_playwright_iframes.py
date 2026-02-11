@@ -2,7 +2,7 @@ import pytest
 from dotenv import load_dotenv
 from playwright.sync_api import Page
 
-from autowing.playwright.fixture import create_fixture
+from autowing.playwright import create_fixture
 
 
 @pytest.fixture

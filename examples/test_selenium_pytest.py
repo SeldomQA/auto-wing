@@ -2,11 +2,12 @@
 pytest example for Selenium with AI automation.
 """
 import time
-import pytest
-from selenium import webdriver
-from autowing.selenium.fixture import create_fixture
 
+import pytest
 from dotenv import load_dotenv
+from selenium import webdriver
+
+from autowing.selenium import create_fixture
 
 
 @pytest.fixture(scope="session")
@@ -17,10 +18,13 @@ def driver():
     # loading .env file
     load_dotenv()
 
-    driver = webdriver.Edge()
-    
+    options = webdriver.ChromeOptions()
+    options.add_argument('--disable-web-security')
+    options.add_argument('--headless=new')
+    driver = webdriver.Chrome(options=options)
+
     yield driver
-    
+
     driver.quit()
 
 
