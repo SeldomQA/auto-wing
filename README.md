@@ -41,13 +41,14 @@ __方法一__
 
 申请LLM需要的key，在项目的根目录下创建`.env`文件。推荐`qwen`和 `deepseek`，一是便宜，二是方便。
 
-| Provider     | Website                             | Environment Variables（`.env`）                                                                                                      | Notes                |
-|--------------|-------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|----------------------|
-| **OpenAI**   | https://platform.openai.com/        | `AUTOWING_MODEL_PROVIDER=openai`<br>`OPENAI_API_KEY=sk-proj-abdefghijklmnopqrstwvwxyz0123456789`                                   | 商业模型，功能强大            |
-| **DeepSeek** | https://platform.deepseek.com/      | `AUTOWING_MODEL_PROVIDER=deepseek`<br>`DEEPSEEK_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789`                                    | **推荐** - 免费额度充足，性价比高 |
-| **千问**       | https://bailian.console.aliyun.com/ | `AUTOWING_MODEL_PROVIDER=qwen`<br>`DASHSCOPE_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789`                                       | **推荐** - 国内用户友好，响应快  |
-| **豆包**       | https://console.volcengine.com/     | `AUTOWING_MODEL_PROVIDER=doubao`<br>`ARK_API_KEY=f61d2846-xxx-xxx-xxxx-xxxxxxxxxxxxx`<br>`DOUBAO_MODEL_NAME=ep-20250207200649-xxx` | 字节跳动出品，中文效果好         |
-| **Gemini**   | https://aistudio.google.com/        | `AUTOWING_MODEL_PROVIDER=gemini`<br>`GOOGLE_API_KEY=AIabdefghijklmnopqrstwvwxyz0123456789`                                         | ⚠️ 免费额度有限，建议作为备选     |
+| Provider      | Website                             | Environment Variables（`.env`）                                                                                                      | 
+|---------------|-------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
+| **✅OpenAI**   | https://platform.openai.com/        | `AUTOWING_MODEL_PROVIDER=openai`<br>`OPENAI_API_KEY=sk-proj-abdefghijklmnopqrstwvwxyz0123456789`                                   | 
+| **✅DeepSeek** | https://platform.deepseek.com/      | `AUTOWING_MODEL_PROVIDER=deepseek`<br>`DEEPSEEK_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789`                                    |
+| **✅千问**       | https://bailian.console.aliyun.com/ | `AUTOWING_MODEL_PROVIDER=qwen`<br>`DASHSCOPE_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789`                                       |
+| **✅豆包**       | https://console.volcengine.com/     | `AUTOWING_MODEL_PROVIDER=doubao`<br>`ARK_API_KEY=f61d2846-xxx-xxx-xxxx-xxxxxxxxxxxxx`<br>`DOUBAO_MODEL_NAME=ep-20250207200649-xxx` |
+| **✅Gemini**   | https://aistudio.google.com/        | `AUTOWING_MODEL_PROVIDER=gemini`<br>`GOOGLE_API_KEY=AIabdefghijklmnopqrstwvwxyz0123456789`                                         |
+
 
 __方法二__
 
