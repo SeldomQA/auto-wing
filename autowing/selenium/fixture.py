@@ -1,4 +1,5 @@
 import json
+import uuid
 from typing import Any, Dict
 
 from loguru import logger
@@ -32,6 +33,104 @@ class SeleniumAiFixture(AiFixtureBase):
         self.driver = driver
         self.llm_client = LLMFactory.create()
         self.wait = WebDriverWait(self.driver, 10)  # Default timeout of 10 seconds
+        self._element_markers = {}  # Store element marker mappings
+        self._inject_markers_enabled = True  # Control whether to enable marker injection
+
+    def _inject_element_markers(self) -> None:
+        """
+        Inject unique identifiers into interactive elements on the page
+        This feature is inspired by browser-use design philosophy
+        """
+        if not self._inject_markers_enabled:
+            return
+            
+        try:
+            # Synchronized selectors with Playwright version
+            marker_script = """
+            return (function() {
+                // Function to generate unique ID
+                function generateUniqueId() {
+                    return 'aw-' + Math.random().toString(36).substr(2, 9);
+                }
+                
+                // Same selectors as Playwright version
+                var selectors = [
+                    'input:not([type="hidden"])',
+                    'textarea',
+                    'select',
+                    'button',
+                    'a[href]',
+                    '[role="button"]',
+                    '[role="link"]',
+                    '[role="checkbox"]',
+                    '[role="radio"]',
+                    '[role="searchbox"]',
+                    'summary',
+                    '[contenteditable="true"]',
+                    '[tabindex]:not([tabindex="-1"])'
+                ];
+                
+                var markers = [];
+                
+                selectors.forEach(function(selector) {
+                    var elements = document.querySelectorAll(selector);
+                    elements.forEach(function(element) {
+                        // Skip already marked elements
+                        if (element.hasAttribute('data-autowing-id')) {
+                            return;
+                        }
+                        
+                        // Skip invisible elements
+                        if (element.offsetWidth <= 0 || element.offsetHeight <= 0) {
+                            return;
+                        }
+                        
+                        // Generate unique ID
+                        var uniqueId = generateUniqueId();
+                        element.setAttribute('data-autowing-id', uniqueId);
+                        
+                        // Collect element information (same as Playwright)
+                        markers.push({
+                            id: uniqueId,
+                            tagName: element.tagName.toLowerCase(),
+                            type: element.getAttribute('type') || null,
+                            placeholder: element.getAttribute('placeholder') || null,
+                            value: element.value || null,
+                            textContent: element.textContent ? element.textContent.trim().substring(0, 100) : '',
+                            ariaLabel: element.getAttribute('aria-label') || null,
+                            role: element.getAttribute('role') || null,
+                            boundingBox: {
+                                x: element.getBoundingClientRect().x,
+                                y: element.getBoundingClientRect().y,
+                                width: element.getBoundingClientRect().width,
+                                height: element.getBoundingClientRect().height
+                            }
+                        });
+                    });
+                });
+                
+                return markers;
+            })();
+            """
+            
+            markers = self.driver.execute_script(marker_script)
+            
+            # Always ensure we have a list
+            if not isinstance(markers, list):
+                markers = []
+            
+            # Update marker mapping
+            for marker in markers:
+                if isinstance(marker, dict) and 'id' in marker:
+                    self._element_markers[marker['id']] = marker
+                
+            logger.debug(f"✅ Injected {len(markers)} element markers")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Element marker injection failed: {str(e)}")
+            # Ensure we have an empty dict even on failure
+            if not hasattr(self, '_element_markers'):
+                self._element_markers = {}
 
     def _get_page_context(self) -> Dict[str, Any]:
         """
@@ -42,6 +141,9 @@ class SeleniumAiFixture(AiFixtureBase):
             Dict[str, Any]: A dictionary containing page URL, title, and information about
                            visible interactive elements
         """
+        # Inject element markers
+        self._inject_element_markers()
+        
         # Get basic page info
         basic_info = {
             "url": self.driver.current_url,
@@ -50,50 +152,110 @@ class SeleniumAiFixture(AiFixtureBase):
 
         # Get key elements info using JavaScript
         elements_info = self.driver.execute_script("""
-            const getVisibleElements = () => {
-                const elements = [];
-                const selectors = [
-                    'input',        // input
-                    'textarea',     // input
-                    'select',       // input/click
-                    'button',       // click
-                    'a',            // click
-                    '[role="button"]',   // click
-                    '[role="link"]',     // click
-                    '[role="checkbox"]', // click
-                    '[role="radio"]',    // click
-                    '[role="searchbox"]', // input
-                    'summary',      // click（<details> ）
-                    '[draggable="true"]'  // draggable
-                ];
-                
-                for (const selector of selectors) {
-                    document.querySelectorAll(selector).forEach(el => {
-                        if (el.offsetWidth > 0 && el.offsetHeight > 0) {
-                            elements.push({
-                                tag: el.tagName.toLowerCase(),
-                                type: el.getAttribute('type') || null,
-                                placeholder: el.getAttribute('placeholder') || null,
-                                value: el.value || null,
-                                text: el.textContent?.trim() || '',
-                                aria: el.getAttribute('aria-label') || null,
-                                id: el.id || '',
-                                name: el.getAttribute('name') || null,
-                                class: el.className || '',
-                                draggable: el.getAttribute('draggable') || null
-                            });
-                        }
+            return (function() {
+                var getVisibleElements = function() {
+                    var elements = [];
+                    var selectors = [
+                        'input',
+                        'textarea',
+                        'select',
+                        'button',
+                        'a',
+                        '[role="button"]',
+                        '[role="link"]',
+                        '[role="checkbox"]',
+                        '[role="radio"]',
+                        '[role="searchbox"]',
+                        'summary',
+                        '[draggable="true"]'
+                    ];
+                    
+                    selectors.forEach(function(selector) {
+                        var els = document.querySelectorAll(selector);
+                        els.forEach(function(el) {
+                            if (el.offsetWidth > 0 && el.offsetHeight > 0) {
+                                elements.push({
+                                    tag: el.tagName.toLowerCase(),
+                                    type: el.getAttribute('type') || null,
+                                    placeholder: el.getAttribute('placeholder') || null,
+                                    value: el.value || null,
+                                    text: el.textContent ? el.textContent.trim() : '',
+                                    aria: el.getAttribute('aria-label') || null,
+                                    id: el.id || '',
+                                    name: el.getAttribute('name') || null,
+                                    class: el.className || '',
+                                    draggable: el.getAttribute('draggable') || null,
+                                    // New addition: include autowing marker ID
+                                    autowingId: el.getAttribute('data-autowing-id') || null,
+                                    // New addition: element position information
+                                    boundingBox: {
+                                        x: el.getBoundingClientRect().x,
+                                        y: el.getBoundingClientRect().y,
+                                        width: el.getBoundingClientRect().width,
+                                        height: el.getBoundingClientRect().height
+                                    }
+                                });
+                            }
+                        });
                     });
-                }
-                return elements;
-            };
-            return getVisibleElements();
+                    return elements;
+                };
+                return getVisibleElements();
+            })();
         """)
+        
+        # Handle cases where execute_script returns None
+        if elements_info is None:
+            elements_info = []
 
         return {
             **basic_info,
-            "elements": elements_info
+            "elements": elements_info,
+            "elementMarkers": self._element_markers  # Add marker information
         }
+
+    def _find_element_by_marker(self, marker_id: str):
+        """
+        Find element by marker ID
+        
+        Args:
+            marker_id (str): The autowing marker ID of the element
+            
+        Returns:
+            WebElement: Selenium element object
+        """
+        try:
+            return self.driver.find_element(By.CSS_SELECTOR, f'[data-autowing-id="{marker_id}"]')
+        except:
+            # Fallback to wait for elements
+            return self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, f'[data-autowing-id="{marker_id}"]'))
+            )
+
+    def enable_marker_injection(self, enabled: bool = True):
+        """
+        Enable or disable element marker injection feature
+        
+        Args:
+            enabled (bool): Whether to enable marker injection
+        """
+        self._inject_markers_enabled = enabled
+        if not enabled:
+            self._clear_element_markers()
+
+    def _clear_element_markers(self):
+        """Clear all element markers"""
+        try:
+            self.driver.execute_script("""
+                var elements = document.querySelectorAll('[data-autowing-id]');
+                elements.forEach(function(el) {
+                    el.removeAttribute('data-autowing-id');
+                });
+            """)
+            self._element_markers.clear()
+            logger.debug("🧹 Cleared all element markers")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to clear element markers: {str(e)}")
 
     def ai_action(self, prompt: str) -> None:
         """
@@ -111,65 +273,90 @@ class SeleniumAiFixture(AiFixtureBase):
         context["elements"] = self._remove_empty_keys(context.get("elements", []))
 
         def compute_action():
+            # Enhanced prompt that encourages use of element markers when available
             action_prompt = f"""
-Extract element locator and action from the request. Return ONLY a JSON object.
+You are a web automation assistant. Based on the following page context, provide instructions for the requested action.
 
-Page: {context['url']}
+Current page context:
+URL: {context['url']}
 Title: {context['title']}
-Request: {prompt}
 
-Return format:
+Available elements with unique markers:
+{json.dumps(context['elements'], indent=2)}
+
+Element markers mapping (use these IDs for precise targeting):
+{json.dumps(list(self._element_markers.values()), indent=2, default=str)}
+
+User request: {prompt}
+
+Return ONLY a JSON object with the following structure, no other text:
 {{
-    "selector": "XPATH selector to locate the element",
-    "action": "click/fill/press",
-    "value": "text to input if needed",
-    "key": "key to press if needed"
+    "selector": "CSS selector to locate the element",
+    "action": "fill",
+    "value": "text to input",
+    "key": "key to press if needed",
+    "markerId": "autowing marker ID if available for precise targeting"
 }}
-Note: selector is used for a selenium location, for example：find_element(By.XPATH, selector)
+Note: 
+- Prefer using markerId for precise element targeting when available
+- selector should be a CSS selector (not XPath) for better compatibility
+- If markerId is provided, use it instead of selector for better accuracy
 
 Example response:
 {{
-    "selector": "//input[@id='search-input']",
+    "selector": "input[type='search']",
     "action": "fill",
     "value": "search text",
-    "key": "Enter"
+    "key": "Enter",
+    "markerId": "aw-abc123def"
 }}
-"""
-
+            """
+            
             response = self.llm_client.complete(action_prompt)
             cleaned_response = self._clean_response(response)
             return json.loads(cleaned_response)
 
         # Use cache manager to get or compute the instruction
         instruction = self._get_cached_or_compute(prompt, context, compute_action)
-        # Execute the action using the instruction
+        
+        # Execute the action, prioritizing marker ID
+        marker_id = instruction.get('markerId')
         selector = instruction.get('selector')
         action = instruction.get('action')
 
-        if not selector or not action:
+        if not action:
             raise ValueError("Invalid instruction format")
 
-        # Execute the action
-        selector = selector_to_selenium(selector)
-        try:
-            element = self.wait.until(EC.presence_of_element_located((By.XPATH, selector)))
-        except TimeoutException:
-            element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+        # Priority 1: Use marker ID for precise targeting
+        if marker_id and marker_id in self._element_markers:
+            logger.debug(f"🎯 Using marker ID for precise targeting: {marker_id}")
+            element = self._find_element_by_marker(marker_id)
+        # Priority 2: Use CSS selector
+        elif selector:
+            try:
+                element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+            except TimeoutException:
+                # Fallback to XPath if CSS fails
+                logger.debug(f"🔄 CSS selector failed, trying XPath: {selector}")
+                xpath_selector = selector_to_selenium(selector)
+                element = self.wait.until(EC.presence_of_element_located((By.XPATH, xpath_selector)))
+        else:
+            raise ValueError("No valid selector or marker ID provided")
 
+        # Execute the action
         if action == 'click':
             element.click()
         elif action == 'fill':
             element.clear()
             element.send_keys(instruction.get('value', ''))
             if instruction.get('key'):
-                key_attr = getattr(Keys, instruction['key'].upper(), None)
-                if key_attr:
-                    element.send_keys(key_attr)
+                element.send_keys(getattr(Keys, instruction.get('key').upper(), Keys.ENTER))
         elif action == 'press':
-            key_attr = getattr(Keys, instruction.get('key', 'ENTER').upper())
-            element.send_keys(key_attr)
+            element.send_keys(getattr(Keys, instruction.get('key').upper(), Keys.ENTER))
         else:
             raise ValueError(f"Unsupported action: {action}")
+
+        logger.info(f"✅ Action executed successfully: {action}")
 
     def ai_query(self, prompt: str) -> Any:
         """

@@ -1,4 +1,5 @@
 import json
+import uuid
 from typing import Any, Dict
 
 from loguru import logger
@@ -25,6 +26,85 @@ class PlaywrightAiFixture(AiFixtureBase):
         super().__init__()
         self.page = page
         self.llm_client = LLMFactory.create()
+        self._element_markers = {}  # Store element marker mappings
+        self._inject_markers_enabled = True  # Control whether to enable marker injection
+
+    def _inject_element_markers(self) -> None:
+        """
+        Inject unique identifiers into interactive elements on the page
+        This feature is inspired by browser-use design philosophy
+        """
+        if not self._inject_markers_enabled:
+            return
+            
+        try:
+            # Execute JavaScript to inject markers on the page
+            marker_script = """
+            (() => {
+                // Function to generate unique ID
+                function generateUniqueId() {
+                    return 'aw-' + Math.random().toString(36).substr(2, 9);
+                }
+                
+                // Define element selectors that need marking
+                const selectors = [
+                    'input:not([type="hidden"])',
+                    'textarea',
+                    'select',
+                    'button',
+                    'a[href]',
+                    '[role="button"]',
+                    '[role="link"]',
+                    '[role="checkbox"]',
+                    '[role="radio"]',
+                    '[role="searchbox"]',
+                    'summary',
+                    '[contenteditable="true"]',
+                    '[tabindex]:not([tabindex="-1"])'
+                ];
+                
+                const markers = [];
+                
+                selectors.forEach(selector => {
+                    document.querySelectorAll(selector).forEach(element => {
+                        // Skip already marked elements
+                        if (element.hasAttribute('data-autowing-id')) {
+                            return;
+                        }
+                        
+                        // Generate unique ID
+                        const uniqueId = generateUniqueId();
+                        element.setAttribute('data-autowing-id', uniqueId);
+                        
+                        // Collect element information
+                        markers.push({
+                            id: uniqueId,
+                            tagName: element.tagName.toLowerCase(),
+                            type: element.getAttribute('type') || null,
+                            placeholder: element.getAttribute('placeholder') || null,
+                            value: element.value || null,
+                            textContent: element.textContent?.trim().substring(0, 100) || '',
+                            ariaLabel: element.getAttribute('aria-label') || null,
+                            role: element.getAttribute('role') || null,
+                            boundingBox: element.getBoundingClientRect()
+                        });
+                    });
+                });
+                
+                return markers;
+            })();
+            """
+            
+            markers = self.page.evaluate(marker_script)
+            
+            # Update local marker mapping
+            for marker in markers:
+                self._element_markers[marker['id']] = marker
+                
+            logger.debug(f"✅ Injected {len(markers)} element markers")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Element marker injection failed: {str(e)}")
 
     def _get_page_context(self) -> Dict[str, Any]:
         """
@@ -35,13 +115,16 @@ class PlaywrightAiFixture(AiFixtureBase):
             Dict[str, Any]: A dictionary containing page URL, title, and information about
                            visible interactive elements
         """
+        # Inject element markers
+        self._inject_element_markers()
+        
         # Get basic page info
         basic_info = {
             "url": self.page.url,
             "title": self.page.title()
         }
 
-        # Get key elements info
+        # Get key elements info with enhanced data including markers
         elements_info = self.page.evaluate("""() => {
             const getVisibleElements = () => {
                 const elements = [];
@@ -73,7 +156,16 @@ class PlaywrightAiFixture(AiFixtureBase):
                                 id: el.id || '',
                                 name: el.getAttribute('name') || null,
                                 class: el.className || '',
-                                draggable: el.getAttribute('draggable') || null
+                                draggable: el.getAttribute('draggable') || null,
+                                // New addition: include autowing marker ID
+                                autowingId: el.getAttribute('data-autowing-id') || null,
+                                // New addition: element position information
+                                boundingBox: {
+                                    x: el.getBoundingClientRect().x,
+                                    y: el.getBoundingClientRect().y,
+                                    width: el.getBoundingClientRect().width,
+                                    height: el.getBoundingClientRect().height
+                                }
                             });
                         }
                     });
@@ -85,8 +177,46 @@ class PlaywrightAiFixture(AiFixtureBase):
 
         return {
             **basic_info,
-            "elements": elements_info
+            "elements": elements_info,
+            "elementMarkers": self._element_markers  # Add marker information
         }
+
+    def _find_element_by_marker(self, marker_id: str):
+        """
+        Find elements by marker ID
+        
+        Args:
+            marker_id (str): The autowing marker ID of the element
+            
+        Returns:
+            Locator: Playwright element locator
+        """
+        selector = f'[data-autowing-id="{marker_id}"]'
+        return self.page.locator(selector)
+
+    def enable_marker_injection(self, enabled: bool = True):
+        """
+        Enable or disable element marker injection feature
+        
+        Args:
+            enabled (bool): Whether to enable marker injection
+        """
+        self._inject_markers_enabled = enabled
+        if not enabled:
+            self._clear_element_markers()
+
+    def _clear_element_markers(self):
+        """Clear all element markers"""
+        try:
+            self.page.evaluate("""
+                document.querySelectorAll('[data-autowing-id]').forEach(el => {
+                    el.removeAttribute('data-autowing-id');
+                });
+            """)
+            self._element_markers.clear()
+            logger.debug("🧹 Cleared all element markers")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to clear element markers: {str(e)}")
 
     def ai_action(self, prompt: str, iframe=None) -> None:
         """
@@ -113,8 +243,11 @@ Current page context:
 URL: {context['url']}
 Title: {context['title']}
 
-Available elements:
+Available elements with unique markers:
 {json.dumps(context['elements'], indent=2)}
+
+Element markers mapping (use these IDs for precise targeting):
+{json.dumps(list(self._element_markers.values()), indent=2, default=str)}
 
 User request: {prompt}
 
@@ -123,18 +256,22 @@ Return ONLY a JSON object with the following structure, no other text:
     "selector": "CSS selector or XPath to locate the element",
     "action": "fill",
     "value": "text to input",
-    "key": "key to press if needed"
+    "key": "key to press if needed",
+    "markerId": "autowing marker ID if available for precise targeting"
 }}
-Note: selector is used for a playwright location, for example：page.locator(selector)
+Note: 
+- Prefer using markerId for precise element targeting when available
+- selector is used for a playwright location, for example：page.locator(selector)
+- If markerId is provided, use it instead of selector for better accuracy
 
 Example response:
 {{
     "selector": "//input[id='search-input']",
     "action": "fill",
     "value": "search text",
-    "key": "Enter"
+    "key": "Enter",
+    "markerId": "aw-abc123def"
 }}
-Note: The CSS selector the tag name (input/button/select...).
             """
             response = self.llm_client.complete(action_prompt)
             cleaned_response = self._clean_response(response)
@@ -142,19 +279,28 @@ Note: The CSS selector the tag name (input/button/select...).
 
         # Use cache manager to get or compute the instruction
         instruction = self._get_cached_or_compute(prompt, context, compute_action)
-        # Execute the action using the instruction
+        
+        # Execute action, prioritize using marker ID
+        marker_id = instruction.get('markerId')
         selector = instruction.get('selector')
         action = instruction.get('action')
 
-        if not selector or not action:
+        if not action:
             raise ValueError("Invalid instruction format")
 
-        # Perform the action
-        selector = selector_to_locator(selector)
-        element = self.page.locator(selector)
-        if iframe is not None:
-            element = iframe.locator(selector)
+        # Prioritize using marker ID for precise targeting
+        if marker_id and marker_id in self._element_markers:
+            logger.debug(f"🎯 Using marker ID to locate element: {marker_id}")
+            element = self._find_element_by_marker(marker_id)
+        elif selector:
+            selector = selector_to_locator(selector)
+            element = self.page.locator(selector)
+            if iframe is not None:
+                element = iframe.locator(selector)
+        else:
+            raise ValueError("No valid selector or marker ID provided")
 
+        # Execute specific action
         if action == 'click':
             element.click()
         elif action == 'fill':
@@ -166,6 +312,8 @@ Note: The CSS selector the tag name (input/button/select...).
         else:
             raise ValueError(f"Unsupported action: {action}")
 
+        logger.info(f"✅ Action executed: {action}")
+
     def ai_query(self, prompt: str) -> Any:
         """
         Query information from the page using AI analysis.
@@ -173,7 +321,7 @@ Note: The CSS selector the tag name (input/button/select...).
 
         Args:
             prompt (str): Natural language query about the page content.
-                         Can include format hints like 'string[]' or 'number'.
+                         It can include format hints like 'string[]' or 'number'.
 
         Returns:
             Any: The query results in the requested format
