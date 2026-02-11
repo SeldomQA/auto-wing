@@ -1,11 +1,13 @@
 """
 Unittest example for Selenium with AI automation.
 """
-import unittest
 import time
-from selenium import webdriver
-from autowing.selenium.fixture import create_fixture
+import unittest
+
 from dotenv import load_dotenv
+from selenium import webdriver
+
+from autowing.selenium.fixture import create_fixture
 
 
 class TestBingSearch(unittest.TestCase):
@@ -15,7 +17,10 @@ class TestBingSearch(unittest.TestCase):
         # load .env file
         load_dotenv()
         # Initialize Edge WebDriver
-        cls.driver = webdriver.Edge()
+        options = webdriver.ChromeOptions()
+        options.add_argument('--disable-web-security')
+        options.add_argument('--headless=new')
+        cls.driver = webdriver.Chrome(options=options)
         # Create AI fixture
         ai_fixture = create_fixture()
         cls.ai = ai_fixture(cls.driver)

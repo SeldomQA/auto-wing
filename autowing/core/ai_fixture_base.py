@@ -23,6 +23,9 @@ class AiFixtureBase:
 
         new_list = []
         for d in dict_list:
+            # Skip None values
+            if d is None:
+                continue
             new_dict = {k: v for k, v in d.items() if v != '' and v is not None}
             new_list.append(new_dict)
 

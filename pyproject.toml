@@ -10,11 +10,12 @@ readme = "README.md"
 authors = [
     { name = "defnngj", email = "defnngj@gmail.com" }
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10,<4.0"
 
 dependencies = [
     "openai>=2.15.0, <3.0.0",
     "dashscope>=1.25.9,<2.0.0",
+    "google-genai (>=1.62.0,<2.0.0)",
     "python-dotenv>=1.2.1,<2.0.0",
     "loguru>=0.7.3,<0.8.0",
 ]

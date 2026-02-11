@@ -42,6 +42,7 @@ class AppiumAiFixture(AiFixtureBase):
             driver (WebDriver): The Appium WebDriver instance to automate
             platform: Mobile operating system platform
         """
+        super().__init__()
         self.driver = driver
         self.platform = platform
         self.llm_client = LLMFactory.create()
