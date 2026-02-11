@@ -5,12 +5,12 @@ from typing import Any, Dict
 from loguru import logger
 from playwright.sync_api import Page
 
-from autowing.core.ai_fixture_base import AiFixtureBase
+from autowing.core.ai_fixture_web import AiFixtureWeb
 from autowing.core.llm.factory import LLMFactory
 from autowing.utils.transition import selector_to_locator
 
 
-class PlaywrightAiFixture(AiFixtureBase):
+class PlaywrightAiFixture(AiFixtureWeb):
     """
     A fixture class that combines Playwright with AI capabilities for web automation.
     Provides AI-driven interaction with web pages using various LLM providers.
@@ -26,121 +26,91 @@ class PlaywrightAiFixture(AiFixtureBase):
         super().__init__()
         self.page = page
         self.llm_client = LLMFactory.create()
-        self._element_markers = {}  # Store element marker mappings
-        self._inject_markers_enabled = True  # Control whether to enable marker injection
 
-    def _inject_element_markers(self) -> None:
-        """
-        Inject unique identifiers into interactive elements on the page
-        This feature is inspired by browser-use design philosophy
-        """
-        if not self._inject_markers_enabled:
-            return
+    def _execute_marker_injection_script(self) -> Any:
+        """Execute the JavaScript marker injection script for Playwright."""
+        marker_script = """
+        (() => {
+            // Function to generate unique ID
+            function generateUniqueId() {
+                return 'aw-' + Math.random().toString(36).substr(2, 9);
+            }
             
-        try:
-            # Execute JavaScript to inject markers on the page
-            marker_script = """
-            (() => {
-                // Function to generate unique ID
-                function generateUniqueId() {
-                    return 'aw-' + Math.random().toString(36).substr(2, 9);
-                }
-                
-                // Define element selectors that need marking
+            // Define element selectors that need marking
+            const selectors = [
+                'input:not([type="hidden"])',
+                'textarea',
+                'select',
+                'button',
+                'a[href]',
+                '[role="button"]',
+                '[role="link"]',
+                '[role="checkbox"]',
+                '[role="radio"]',
+                '[role="searchbox"]',
+                'summary',
+                '[contenteditable="true"]',
+                '[tabindex]:not([tabindex="-1"])'
+            ];
+            
+            const markers = [];
+            
+            selectors.forEach(selector => {
+                document.querySelectorAll(selector).forEach(element => {
+                    // Skip already marked elements
+                    if (element.hasAttribute('data-autowing-id')) {
+                        return;
+                    }
+                    
+                    // Generate unique ID
+                    const uniqueId = generateUniqueId();
+                    element.setAttribute('data-autowing-id', uniqueId);
+                    
+                    // Collect element information
+                    markers.push({
+                        id: uniqueId,
+                        tagName: element.tagName.toLowerCase(),
+                        type: element.getAttribute('type') || null,
+                        placeholder: element.getAttribute('placeholder') || null,
+                        value: element.value || null,
+                        textContent: element.textContent?.trim().substring(0, 100) || '',
+                        ariaLabel: element.getAttribute('aria-label') || null,
+                        role: element.getAttribute('role') || null,
+                        boundingBox: element.getBoundingClientRect()
+                    });
+                });
+            });
+            
+            return markers;
+        })();
+        """
+        return self.page.evaluate(marker_script)
+
+    def _get_basic_page_info(self) -> Dict[str, str]:
+        """Get basic page information for Playwright."""
+        return {
+            "url": self.page.url,
+            "title": self.page.title()
+        }
+
+    def _execute_elements_script(self) -> Any:
+        """Execute JavaScript to get page elements information for Playwright."""
+        return self.page.evaluate("""() => {
+            const getVisibleElements = () => {
+                const elements = [];
                 const selectors = [
-                    'input:not([type="hidden"])',
+                    'input',
                     'textarea',
                     'select',
                     'button',
-                    'a[href]',
+                    'a',
                     '[role="button"]',
                     '[role="link"]',
                     '[role="checkbox"]',
                     '[role="radio"]',
                     '[role="searchbox"]',
                     'summary',
-                    '[contenteditable="true"]',
-                    '[tabindex]:not([tabindex="-1"])'
-                ];
-                
-                const markers = [];
-                
-                selectors.forEach(selector => {
-                    document.querySelectorAll(selector).forEach(element => {
-                        // Skip already marked elements
-                        if (element.hasAttribute('data-autowing-id')) {
-                            return;
-                        }
-                        
-                        // Generate unique ID
-                        const uniqueId = generateUniqueId();
-                        element.setAttribute('data-autowing-id', uniqueId);
-                        
-                        // Collect element information
-                        markers.push({
-                            id: uniqueId,
-                            tagName: element.tagName.toLowerCase(),
-                            type: element.getAttribute('type') || null,
-                            placeholder: element.getAttribute('placeholder') || null,
-                            value: element.value || null,
-                            textContent: element.textContent?.trim().substring(0, 100) || '',
-                            ariaLabel: element.getAttribute('aria-label') || null,
-                            role: element.getAttribute('role') || null,
-                            boundingBox: element.getBoundingClientRect()
-                        });
-                    });
-                });
-                
-                return markers;
-            })();
-            """
-            
-            markers = self.page.evaluate(marker_script)
-            
-            # Update local marker mapping
-            for marker in markers:
-                self._element_markers[marker['id']] = marker
-                
-            logger.debug(f"✅ Injected {len(markers)} element markers")
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Element marker injection failed: {str(e)}")
-
-    def _get_page_context(self) -> Dict[str, Any]:
-        """
-        Extract context information from the current page.
-        Collects information about visible elements and page metadata.
-
-        Returns:
-            Dict[str, Any]: A dictionary containing page URL, title, and information about
-                           visible interactive elements
-        """
-        # Inject element markers
-        self._inject_element_markers()
-        
-        # Get basic page info
-        basic_info = {
-            "url": self.page.url,
-            "title": self.page.title()
-        }
-
-        # Get key elements info with enhanced data including markers
-        elements_info = self.page.evaluate("""() => {
-            const getVisibleElements = () => {
-                const elements = [];
-                const selectors = [
-                    'input',        // input
-                    'textarea',     // input
-                    'select',       // input/click
-                    'button',       // click
-                    'a',            // click
-                    '[role="button"]',   // click
-                    '[role="link"]',     // click
-                    '[role="checkbox"]', // click
-                    '[role="radio"]',    // click
-                    '[role="searchbox"]', // input
-                    'summary',      // click（<details> ）
-                    '[draggable="true"]'  // draggable
+                    '[draggable="true"]'
                 ];
                 
                 for (const selector of selectors) {
@@ -175,15 +145,9 @@ class PlaywrightAiFixture(AiFixtureBase):
             return getVisibleElements();
         }""")
 
-        return {
-            **basic_info,
-            "elements": elements_info,
-            "elementMarkers": self._element_markers  # Add marker information
-        }
-
     def _find_element_by_marker(self, marker_id: str):
         """
-        Find elements by marker ID
+        Find elements by marker ID for Playwright.
         
         Args:
             marker_id (str): The autowing marker ID of the element
@@ -194,29 +158,17 @@ class PlaywrightAiFixture(AiFixtureBase):
         selector = f'[data-autowing-id="{marker_id}"]'
         return self.page.locator(selector)
 
-    def enable_marker_injection(self, enabled: bool = True):
+    def _clear_element_markers_script(self) -> str:
+        """Get JavaScript code to clear all element markers for Playwright."""
+        return """
+            document.querySelectorAll('[data-autowing-id]').forEach(el => {
+                el.removeAttribute('data-autowing-id');
+            });
         """
-        Enable or disable element marker injection feature
-        
-        Args:
-            enabled (bool): Whether to enable marker injection
-        """
-        self._inject_markers_enabled = enabled
-        if not enabled:
-            self._clear_element_markers()
 
-    def _clear_element_markers(self):
-        """Clear all element markers"""
-        try:
-            self.page.evaluate("""
-                document.querySelectorAll('[data-autowing-id]').forEach(el => {
-                    el.removeAttribute('data-autowing-id');
-                });
-            """)
-            self._element_markers.clear()
-            logger.debug("🧹 Cleared all element markers")
-        except Exception as e:
-            logger.warning(f"⚠️ Failed to clear element markers: {str(e)}")
+    def _execute_javascript(self, script: str) -> Any:
+        """Execute JavaScript code for Playwright."""
+        return self.page.evaluate(script)
 
     def ai_action(self, prompt: str, iframe=None) -> None:
         """
@@ -461,7 +413,7 @@ IMPORTANT: Return ONLY the word 'true' or 'false' (lowercase). No other text, no
             if cleaned_response == 'false':
                 return False
 
-            # If response contains other content, try extracting boolean
+            # If responses contain other content, try extracting boolean
             if 'true' in cleaned_response.split():
                 return True
             if 'false' in cleaned_response.split():
