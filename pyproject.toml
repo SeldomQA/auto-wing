@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "autowing"
-version = "0.6.2"
+version = "0.7.0"
 description = "auto-wing is a tool that uses LLM to assist automated testing."
 readme = "README.md"
 authors = [
