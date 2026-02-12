@@ -1,6 +1,6 @@
 from typing import Any
 
-from autowing.core.cache.cache_manager import CacheManager
+from autowing.core.cache.cache_manager import IntelligentCacheManager
 
 
 class AiFixtureBase:
@@ -10,8 +10,8 @@ class AiFixtureBase:
     """
 
     def __init__(self):
-        """Initialize the base fixture with cache support."""
-        self.cache_manager = CacheManager()
+        """Initialize the base fixture with intelligent cache support."""
+        self.cache_manager = IntelligentCacheManager()
 
     def _remove_empty_keys(self, dict_list: list) -> list:
         """
@@ -96,22 +96,31 @@ class AiFixtureBase:
 
     def _get_cached_or_compute(self, prompt: str, context: dict, compute_func) -> Any:
         """
-        Get response from cache or compute it using the provided function.
+        Get responses from intelligent cache or compute it using the provided function.
         
         Args:
             prompt: The prompt to generate cache key
-            context: The context to generate cache key
+            context: The context to generate cache key  
             compute_func: Function to compute response if not cached
         """
-        # Try to get from cache first
-        cached_response = self.cache_manager.get(prompt, context)
+        # Try to get from intelligent cache first
+        cached_response = self.cache_manager.get_intelligent(prompt, context)
         if cached_response is not None:
             return cached_response
 
         # Compute response if not cached
         response = compute_func()
 
-        # Cache the computed response
-        self.cache_manager.set(prompt, context, response)
+        # Cache the computed response using intelligent caching
+        self.cache_manager.set_intelligent(prompt, context, response)
 
         return response
+
+    def get_cache_statistics(self) -> dict:
+        """
+        Get cache usage statistics.
+        
+        Returns:
+            Dictionary containing cache statistics
+        """
+        return self.cache_manager.get_statistics()
