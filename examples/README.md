@@ -17,6 +17,7 @@
 | `test_appium_unittest.py`            | Appium unittest 示例，用于移动自动化测试                          |
 | `test_playwright_iframes.py`         | 演示如何处理 iframe 元素并在 iframe 内执行 AI 操作（使用 Playwright）    |
 | `test_selenium_iframes.py`           | 展示 Selenium WebDriver 的 iframe 处理功能及 AI 集成            |
+| `test_intelligent_cache.py`          | 智能缓存管理机制示例                                            |
 
 ## 使用方法
 
