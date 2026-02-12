@@ -41,7 +41,7 @@ class AiFixtureWeb(AiFixtureBase, ABC):
                 if isinstance(marker, dict) and 'id' in marker:
                     self._element_markers[marker['id']] = marker
                 
-            logger.debug(f"✅ Injected {len(markers)} element markers")
+            logger.debug(f"💉 Injected {len(markers)} element markers")
             
         except Exception as e:
             logger.warning(f"⚠️ Element marker injection failed: {str(e)}")
