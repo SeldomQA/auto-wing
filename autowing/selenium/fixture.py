@@ -30,20 +30,29 @@ class SeleniumAiFixture(AiFixtureWeb):
         """
         super().__init__()
         self.driver = driver
+        self.wait = WebDriverWait(driver, 10)
         self.llm_client = LLMFactory.create()
-        self.wait = WebDriverWait(self.driver, 10)  # Default timeout of 10 seconds
+
+    def get_cache_statistics(self) -> dict:
+        """
+        Get cache usage statistics.
+        
+        Returns:
+            Dictionary containing cache statistics
+        """
+        return self.cache_manager.get_statistics()
 
     def _execute_marker_injection_script(self) -> Any:
         """Execute the JavaScript marker injection script for Selenium."""
         marker_script = """
-        return (function() {
+        (() => {
             // Function to generate unique ID
             function generateUniqueId() {
                 return 'aw-' + Math.random().toString(36).substr(2, 9);
             }
             
-            // Same selectors as Playwright version
-            var selectors = [
+            // Define element selectors that need marking
+            const selectors = [
                 'input:not([type="hidden"])',
                 'textarea',
                 'select',
@@ -59,11 +68,11 @@ class SeleniumAiFixture(AiFixtureWeb):
                 '[tabindex]:not([tabindex="-1"])'
             ];
             
-            var markers = [];
+            const markers = [];
             
-            selectors.forEach(function(selector) {
-                var elements = document.querySelectorAll(selector);
-                elements.forEach(function(element) {
+            selectors.forEach((selector) => {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach((element) => {
                     // Skip already marked elements
                     if (element.hasAttribute('data-autowing-id')) {
                         return;
@@ -75,7 +84,7 @@ class SeleniumAiFixture(AiFixtureWeb):
                     }
                     
                     // Generate unique ID
-                    var uniqueId = generateUniqueId();
+                    const uniqueId = generateUniqueId();
                     element.setAttribute('data-autowing-id', uniqueId);
                     
                     // Collect element information (same as Playwright)
@@ -213,86 +222,81 @@ class SeleniumAiFixture(AiFixtureWeb):
         context["elements"] = self._remove_empty_keys(context.get("elements", []))
 
         def compute_action():
-            # Enhanced prompt that encourages use of element markers when available
+            # Most strict prompt, force specific field names
             action_prompt = f"""
-You are a web automation assistant. Based on the following page context, provide instructions for the requested action.
+You are a web automation assistant. Generate EXACT JSON with these SPECIFIC field names:
 
-Current page context:
+REQUIRED JSON FORMAT:
+{{
+    "selector": "XPATH selector (REQUIRED)",
+    "action": "fill|click|press (REQUIRED)", 
+    "value": "text for fill action (optional)",
+    "key": "key for press action (optional)"
+}}
+
+CURRENT CONTEXT:
 URL: {context['url']}
-Title: {context['title']}
+Elements: {json.dumps(context['elements'], indent=2)}
 
-Available elements with unique markers:
-{json.dumps(context['elements'], indent=2)}
+REQUEST: {prompt}
 
-Element markers mapping (use these IDs for precise targeting):
-{json.dumps(list(self._element_markers.values()), indent=2, default=str)}
+STRICT RULES:
+1. ONLY return the JSON object above
+2. MUST include "selector" and "action" fields
+3. NO explanations, NO other text
+4. Use EXACT field names shown above
 
-User request: {prompt}
+EXAMPLE:
+{{"selector": "//input[@id='sb_form_q']", "action": "fill", "value": "playwright", "key": "Enter"}}
 
-Return ONLY a JSON object with the following structure, no other text:
-{{
-    "selector": "CSS selector to locate the element",
-    "action": "fill",
-    "value": "text to input",
-    "key": "key to press if needed",
-    "markerId": "autowing marker ID if available for precise targeting"
-}}
-Note: 
-- Prefer using markerId for precise element targeting when available
-- selector should be a CSS selector (not XPath) for better compatibility
-- If markerId is provided, use it instead of selector for better accuracy
+RESPONSE (JSON ONLY):
+"""
 
-Example response:
-{{
-    "selector": "input[type='search']",
-    "action": "fill",
-    "value": "search text",
-    "key": "Enter",
-    "markerId": "aw-abc123def"
-}}
-            """
-            
             response = self.llm_client.complete(action_prompt)
             cleaned_response = self._clean_response(response)
-            return json.loads(cleaned_response)
+            
+            # Validate response is valid JSON
+            try:
+                result = json.loads(cleaned_response)
+                # Strict validation of required fields
+                required_fields = ['selector', 'action']
+                for field in required_fields:
+                    if field not in result:
+                        raise ValueError(f"Missing required field '{field}'. Got fields: {list(result.keys())}")
+                return result
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ JSON parsing failed. Response content: {cleaned_response[:200]}...")
+                raise ValueError(f"LLM returned invalid JSON format: {e}")
 
         # Use cache manager to get or compute the instruction
         instruction = self._get_cached_or_compute(prompt, context, compute_action)
         
-        # Execute the action, prioritizing marker ID
-        marker_id = instruction.get('markerId')
+        # Execute the action using the instruction
         selector = instruction.get('selector')
         action = instruction.get('action')
 
-        if not action:
+        if not selector or not action:
             raise ValueError("Invalid instruction format")
 
-        # Priority 1: Use marker ID for precise targeting
-        if marker_id and marker_id in self._element_markers:
-            logger.debug(f"🎯 Using marker ID for precise targeting: {marker_id}")
-            element = self._find_element_by_marker(marker_id)
-        # Priority 2: Use CSS selector
-        elif selector:
-            try:
-                element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
-            except TimeoutException:
-                # Fallback to XPath if CSS fails
-                logger.debug(f"🔄 CSS selector failed, trying XPath: {selector}")
-                xpath_selector = selector_to_selenium(selector)
-                element = self.wait.until(EC.presence_of_element_located((By.XPATH, xpath_selector)))
-        else:
-            raise ValueError("No valid selector or marker ID provided")
-
         # Execute the action
+        selector = selector_to_selenium(selector)
+        try:
+            element = self.wait.until(EC.presence_of_element_located((By.XPATH, selector)))
+        except TimeoutException:
+            element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+
         if action == 'click':
             element.click()
         elif action == 'fill':
             element.clear()
             element.send_keys(instruction.get('value', ''))
             if instruction.get('key'):
-                element.send_keys(getattr(Keys, instruction.get('key').upper(), Keys.ENTER))
+                key_attr = getattr(Keys, instruction['key'].upper(), None)
+                if key_attr:
+                    element.send_keys(key_attr)
         elif action == 'press':
-            element.send_keys(getattr(Keys, instruction.get('key').upper(), Keys.ENTER))
+            key_attr = getattr(Keys, instruction.get('key', 'ENTER').upper())
+            element.send_keys(key_attr)
         else:
             raise ValueError(f"Unsupported action: {action}")
 

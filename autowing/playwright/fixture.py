@@ -26,6 +26,15 @@ class PlaywrightAiFixture(AiFixtureWeb):
         self.page = page
         self.llm_client = LLMFactory.create()
 
+    def get_cache_statistics(self) -> dict:
+        """
+        Get cache usage statistics.
+        
+        Returns:
+            Dictionary containing cache statistics
+        """
+        return self.cache_manager.get_statistics()
+
     def _execute_marker_injection_script(self) -> Any:
         """Execute the JavaScript marker injection script for Playwright."""
         marker_script = """
@@ -169,89 +178,82 @@ class PlaywrightAiFixture(AiFixtureWeb):
         """Execute JavaScript code for Playwright."""
         return self.page.evaluate(script)
 
-    def ai_action(self, prompt: str, iframe=None) -> None:
+    def ai_action(self, prompt: str, **kwargs) -> None:
         """
         Execute an AI-driven action on the page based on the given prompt.
-        The AI will analyze the page context and perform the requested action.
 
         Args:
             prompt (str): Natural language description of the action to perform
-            iframe: FrameLocator object
+            **kwargs: Additional arguments for framework-specific implementations
 
         Raises:
             ValueError: If the AI response cannot be parsed or contains invalid instructions
-            Exception: If the requested action cannot be performed
         """
         logger.info(f"🪽 AI Action: {prompt}")
         context = self._get_page_context()
         context["elements"] = self._remove_empty_keys(context.get("elements", []))
 
         def compute_action():
+            # Most strict prompt, force specific field names
             action_prompt = f"""
-You are a web automation assistant. Based on the following page context, provide instructions for the requested action.
+You are a web automation assistant. Generate EXACT JSON with these SPECIFIC field names:
 
-Current page context:
+REQUIRED JSON FORMAT:
+{{
+    "selector": "CSS selector or XPath (REQUIRED)",
+    "action": "fill|click|press (REQUIRED)", 
+    "value": "text for fill action (optional)",
+    "key": "key for press action (optional)"
+}}
+
+CURRENT CONTEXT:
 URL: {context['url']}
-Title: {context['title']}
+Elements: {json.dumps(context['elements'], indent=2)}
 
-Available elements with unique markers:
-{json.dumps(context['elements'], indent=2)}
+REQUEST: {prompt}
 
-Element markers mapping (use these IDs for precise targeting):
-{json.dumps(list(self._element_markers.values()), indent=2, default=str)}
+STRICT RULES:
+1. ONLY return the JSON object above
+2. MUST include "selector" and "action" fields
+3. NO explanations, NO other text
+4. Use EXACT field names shown above
 
-User request: {prompt}
+EXAMPLE:
+{{"selector": "input#sb_form_q", "action": "fill", "value": "playwright", "key": "Enter"}}
 
-Return ONLY a JSON object with the following structure, no other text:
-{{
-    "selector": "CSS selector or XPath to locate the element",
-    "action": "fill",
-    "value": "text to input",
-    "key": "key to press if needed",
-    "markerId": "autowing marker ID if available for precise targeting"
-}}
-Note: 
-- Prefer using markerId for precise element targeting when available
-- selector is used for a playwright location, for example：page.locator(selector)
-- If markerId is provided, use it instead of selector for better accuracy
+RESPONSE (JSON ONLY):
+"""
 
-Example response:
-{{
-    "selector": "//input[id='search-input']",
-    "action": "fill",
-    "value": "search text",
-    "key": "Enter",
-    "markerId": "aw-abc123def"
-}}
-            """
             response = self.llm_client.complete(action_prompt)
             cleaned_response = self._clean_response(response)
-            return json.loads(cleaned_response)
+
+            # Validate response is valid JSON
+            try:
+                result = json.loads(cleaned_response)
+                # Strict validation of required fields
+                required_fields = ['selector', 'action']
+                for field in required_fields:
+                    if field not in result:
+                        raise ValueError(f"Missing required field '{field}'. Got fields: {list(result.keys())}")
+                return result
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ JSON parsing failed. Response content: {cleaned_response[:200]}...")
+                raise ValueError(f"LLM returned invalid JSON format: {e}")
 
         # Use cache manager to get or compute the instruction
         instruction = self._get_cached_or_compute(prompt, context, compute_action)
-        
-        # Execute action, prioritize using marker ID
-        marker_id = instruction.get('markerId')
+
+        # Execute the action using the instruction
         selector = instruction.get('selector')
         action = instruction.get('action')
 
-        if not action:
+        if not selector or not action:
             raise ValueError("Invalid instruction format")
 
-        # Prioritize using marker ID for precise targeting
-        if marker_id and marker_id in self._element_markers:
-            logger.debug(f"🎯 Using marker ID to locate element: {marker_id}")
-            element = self._find_element_by_marker(marker_id)
-        elif selector:
-            selector = selector_to_locator(selector)
-            element = self.page.locator(selector)
-            if iframe is not None:
-                element = iframe.locator(selector)
-        else:
-            raise ValueError("No valid selector or marker ID provided")
+        # Perform the action
+        selector = selector_to_locator(selector)
+        element = self.page.locator(selector)
 
-        # Execute specific action
         if action == 'click':
             element.click()
         elif action == 'fill':
@@ -262,8 +264,6 @@ Example response:
             element.press(instruction.get('key', 'Enter'))
         else:
             raise ValueError(f"Unsupported action: {action}")
-
-        logger.info(f"✅ Action executed: {action}")
 
     def ai_query(self, prompt: str) -> Any:
         """
