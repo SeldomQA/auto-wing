@@ -14,7 +14,7 @@ auto-wing是一个利用LLM辅助自动化测试的工具, 为你的自动化测
 
 ⭐ 支持多种操作：`ai_action`、`ai_query`、`ai_assert`。
 
-⭐ 默认支持缓存：首次执行AI任务会被缓存，后续执行相同的任务可以提升效率。
+⭐ 智能缓存管理： 减少LLM调用，增加执行速度。
 
 ⭐ 无痛的集成到现有自动化项目（`pytest`、`unittest`）中。
 
@@ -29,10 +29,10 @@ pip install autowing
 pip install pytest-playwright
 
 # selenium [optional]
-pip install selenium [optional]
+pip install selenium
 
 # appium [optional]
-pip install appium-python-client [optional] 
+pip install appium-python-client
 ```
 
 ## Setting Env
@@ -101,7 +101,7 @@ def test_bing_search(page: Page, ai):
 
 * 运行日志：
 
-``shell
+```shell
 > pytest test_playwright_pytest.py -s
 > ================================================= test session
 > starts =================================================

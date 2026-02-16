@@ -1,6 +1,8 @@
 from typing import Any
 
-from autowing.core.cache.cache_manager import CacheManager
+from loguru import logger
+
+from autowing.core.cache.cache_manager import IntelligentCacheManager
 
 
 class AiFixtureBase:
@@ -10,8 +12,8 @@ class AiFixtureBase:
     """
 
     def __init__(self):
-        """Initialize the base fixture with cache support."""
-        self.cache_manager = CacheManager()
+        """Initialize the base fixture with intelligent cache support."""
+        self.cache_manager = IntelligentCacheManager()
 
     def _remove_empty_keys(self, dict_list: list) -> list:
         """
@@ -41,18 +43,36 @@ class AiFixtureBase:
         Returns:
             str: Cleaned response text.
         """
+        if not response or not isinstance(response, str):
+            return ""
+
         response = response.strip()
+
+        # Debug logging
+        original_length = len(response)
+        logger.debug(f"🧹 Starting response cleaning, original length: {original_length}")
+
         if '```' in response:
             # Prioritize handling ```json format
             if '```json' in response:
                 response = response.split('```json')[1].split('```')[0].strip()
+                logger.debug("🔧 Detected ```json format, extracted JSON content")
             else:
-                response = response.split('```')[1].split('```')[0].strip()
+                # Handle other code blocks
+                parts = response.split('```')
+                if len(parts) >= 3:
+                    response = parts[1].strip()
+                    logger.debug("🔧 Detected code block format, extracted content")
             # If the cleaned response starts with "json" or "python", remove the first line description
             if response.startswith(('json', 'python')):
                 parts = response.split('\n', 1)
                 if len(parts) > 1:
                     response = parts[1].strip()
+                    logger.debug("🔧 Removed language identifier line")
+
+        # Final cleanup
+        response = response.strip()
+
         return response
 
     def _validate_result_format(self, result: Any, format_hint: str) -> Any:
@@ -85,33 +105,29 @@ class AiFixtureBase:
             except (ValueError, TypeError):
                 raise ValueError(f"Cannot convert results to numbers: {result}")
 
-        if format_hint == 'object[]':
-            if not isinstance(result, list):
-                result = [result]
-            if not all(isinstance(item, dict) for item in result):
-                raise ValueError(f"Not all items are objects: {result}")
-            return result
-
-        return result
-
     def _get_cached_or_compute(self, prompt: str, context: dict, compute_func) -> Any:
         """
-        Get response from cache or compute it using the provided function.
+        Get cached result or compute new result.
         
         Args:
-            prompt: The prompt to generate cache key
-            context: The context to generate cache key
-            compute_func: Function to compute response if not cached
+            prompt: The prompt used for caching
+            context: Context information for caching
+            compute_func: Function to compute result if not cached
+            
+        Returns:
+            Cached or computed result
         """
         # Try to get from cache first
-        cached_response = self.cache_manager.get(prompt, context)
+        cached_response = self.cache_manager.get_intelligent(prompt, context)
         if cached_response is not None:
             return cached_response
 
-        # Compute response if not cached
-        response = compute_func()
-
-        # Cache the computed response
-        self.cache_manager.set(prompt, context, response)
-
-        return response
+        # Compute new result
+        try:
+            response = compute_func()
+            # Cache the result
+            self.cache_manager.set_intelligent(prompt, context, response)
+            return response
+        except Exception as e:
+            logger.error(f"❌ Computation function execution failed: {e}")
+            raise
