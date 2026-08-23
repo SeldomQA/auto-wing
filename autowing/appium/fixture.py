@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from appium.webdriver.common.appiumby import AppiumBy
 from appium.webdriver.webdriver import WebDriver
@@ -101,6 +101,10 @@ class AppiumAiFixture(AiFixtureBase):
             "elements": elements_info
         }
 
+    def _capture_screenshot_base64(self) -> Optional[str]:
+        """Capture the current screen as a base64-encoded PNG image."""
+        return self.driver.get_screenshot_as_base64()
+
     def ai_action(self, prompt: str) -> None:
         """
         Execute an AI-driven action on the screen based on the given prompt.
@@ -134,7 +138,7 @@ Return list format:
 No other text or explanation.
 """
 
-        response = self.llm_client.complete(action_prompt)
+        response = self._llm_complete(action_prompt)
         cleaned_response = self._clean_response(response)
         instruction = json.loads(cleaned_response)
 
@@ -234,7 +238,7 @@ Return format:
 No other text or explanation.
 """
 
-        response = self.llm_client.complete(query_prompt)
+        response = self._llm_complete(query_prompt)
         cleaned_response = self._clean_response(response)
         try:
             result = json.loads(cleaned_response)
@@ -296,7 +300,7 @@ Assertion: {prompt}
 IMPORTANT: Return ONLY the word 'true' or 'false' (lowercase). No other text, no explanation.
 """
 
-        response = self.llm_client.complete(assert_prompt)
+        response = self._llm_complete(assert_prompt)
         cleaned_response = self._clean_response(response).lower()
 
         # Directly match true or false

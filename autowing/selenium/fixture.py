@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from loguru import logger
 from selenium.common.exceptions import TimeoutException
@@ -206,6 +206,10 @@ class SeleniumAiFixture(AiFixtureWeb):
         """Execute JavaScript code for Selenium."""
         return self.driver.execute_script(script)
 
+    def _capture_screenshot_base64(self) -> Optional[str]:
+        """Capture the current page viewport as a base64-encoded PNG image."""
+        return self.driver.get_screenshot_as_base64()
+
     def ai_action(self, prompt: str) -> None:
         """
         Execute an AI-driven action on the page based on the given prompt.
@@ -252,7 +256,7 @@ EXAMPLE:
 RESPONSE (JSON ONLY):
 """
 
-            response = self.llm_client.complete(action_prompt)
+            response = self._llm_complete(action_prompt)
             cleaned_response = self._clean_response(response)
             
             # Validate response is valid JSON
@@ -365,7 +369,7 @@ Return format:
 No other text or explanation.
 """
 
-        response = self.llm_client.complete(query_prompt)
+        response = self._llm_complete(query_prompt)
         cleaned_response = self._clean_response(response)
         try:
             result = json.loads(cleaned_response)
@@ -426,7 +430,7 @@ Assertion: {prompt}
 IMPORTANT: Return ONLY the word 'true' or 'false' (lowercase). No other text, no explanation.
 """
 
-        response = self.llm_client.complete(assert_prompt)
+        response = self._llm_complete(assert_prompt)
         cleaned_response = self._clean_response(response).lower()
 
         # Directly match true or false
@@ -547,7 +551,7 @@ Finally, the output result is required to be in {language}
 """
 
         try:
-            response = self.llm_client.complete(case_prompt)
+            response = self._llm_complete(case_prompt)
             cleaned_response = self._clean_response(response)
 
             logger.debug(f"""📄 Function Cases:\n {cleaned_response}""")

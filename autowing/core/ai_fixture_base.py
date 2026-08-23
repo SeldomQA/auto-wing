@@ -1,4 +1,5 @@
-from typing import Any
+import os
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -14,6 +15,81 @@ class AiFixtureBase:
     def __init__(self):
         """Initialize the base fixture with intelligent cache support."""
         self.cache_manager = IntelligentCacheManager()
+        # Vision mode switch: enabled via AUTOWING_VISION env var or enable_vision()
+        self._vision_enabled = os.getenv("AUTOWING_VISION", "false").lower() in ("1", "true", "yes")
+
+    def enable_vision(self, enabled: bool = True):
+        """
+        Enable or disable vision mode for LLM calls.
+
+        When enabled, a screenshot of the current page/screen is attached to the
+        prompt so that vision-capable models can ground their answers visually.
+        If the model doesn't support vision or the screenshot fails, the call
+        automatically falls back to text-only mode.
+
+        Args:
+            enabled (bool): Whether to enable vision mode
+        """
+        self._vision_enabled = enabled
+
+    def _capture_screenshot_base64(self) -> Optional[str]:
+        """
+        Capture the current page/screen as a base64-encoded PNG image.
+
+        Subclasses backed by a real driver should override this method.
+
+        Returns:
+            Optional[str]: Base64 image data, or None if capture is unavailable
+        """
+        return None
+
+    @staticmethod
+    def _build_vision_messages(prompt: str, screenshot_b64: str) -> list:
+        """
+        Build OpenAI-style multimodal messages for vision completion.
+
+        Args:
+            prompt (str): The text prompt
+            screenshot_b64 (str): Base64-encoded screenshot
+
+        Returns:
+            list: Messages list compatible with complete_with_vision()
+        """
+        return [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}
+                }
+            ]
+        }]
+
+    def _llm_complete(self, prompt: str) -> str:
+        """
+        Unified LLM completion entry point with optional vision support.
+
+        When vision mode is enabled, attaches a screenshot and calls
+        complete_with_vision(); on any failure (unsupported model, capture
+        error, API error) it automatically falls back to text-only complete().
+
+        Args:
+            prompt (str): The text prompt to complete
+
+        Returns:
+            str: The model's response text
+        """
+        if self._vision_enabled:
+            try:
+                screenshot_b64 = self._capture_screenshot_base64()
+                if screenshot_b64:
+                    messages = self._build_vision_messages(prompt, screenshot_b64)
+                    return self.llm_client.complete_with_vision({"messages": messages})
+                logger.warning("⚠️ Vision enabled but screenshot capture unavailable, using text mode")
+            except Exception as e:
+                logger.warning(f"⚠️ Vision completion failed, falling back to text mode: {e}")
+        return self.llm_client.complete(prompt)
 
     def _remove_empty_keys(self, dict_list: list) -> list:
         """

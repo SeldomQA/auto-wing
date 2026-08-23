@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 from typing import Optional, Dict, Any, List
@@ -147,11 +148,23 @@ class GeminiClient(BaseLLMClient):
                             if item.get("type") == "text":
                                 parts.append({"text": self._truncate_text(item.get("text", ""))})
                             elif item.get("type") == "image_url":
-                                # Handle image URLs - Gemini expects image data differently
+                                # Handle image URLs - Gemini expects inline image bytes
                                 image_url = item.get("image_url", {}).get("url", "")
-                                if image_url:
-                                    # For simplicity, we'll treat this as text for now
-                                    # In a full implementation, you'd need to download and process the image
+                                if image_url.startswith("data:"):
+                                    # Base64 data URL: data:image/png;base64,<data>
+                                    try:
+                                        header, b64_data = image_url.split(",", 1)
+                                        mime_type = header[5:].split(";")[0] or "image/png"
+                                        parts.append({
+                                            "inline_data": {
+                                                "mime_type": mime_type,
+                                                "data": base64.b64decode(b64_data)
+                                            }
+                                        })
+                                    except Exception:
+                                        parts.append({"text": "[Image: invalid base64 data]"})
+                                elif image_url:
+                                    # Remote URLs are not downloaded; leave a placeholder
                                     parts.append({"text": f"[Image: {image_url}]"})
             
             contents = [{"parts": parts}]
