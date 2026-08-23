@@ -395,3 +395,37 @@ class IntelligentCacheManager:
         if self.cache_entries:
             prompts = [entry.prompt for entry in self.cache_entries]
             self.prompt_vectors = self.vectorizer.fit_transform(prompts)
+
+
+# Shared instances keyed by cache_dir, so every fixture in the same process
+# (and across test cases) reuses one cache manager instead of rebuilding the
+# TF-IDF index from disk on every AiFixtureBase instantiation.
+_instances: Dict[str, "IntelligentCacheManager"] = {}
+
+
+def get_intelligent_cache_manager(cache_dir: str = ".auto-wing/cache",
+                                ttl_days: int = 7,
+                                similarity_threshold: float = 0.7) -> IntelligentCacheManager:
+    """
+    Get (or lazily create) the shared IntelligentCacheManager for a cache_dir.
+
+    Args:
+        cache_dir: Directory to store cache files
+        ttl_days: Number of days to keep cache entries
+        similarity_threshold: Minimum similarity score for cache hit (0.0-1.0)
+
+    Returns:
+        IntelligentCacheManager: The shared instance for the given cache_dir
+    """
+    if cache_dir not in _instances:
+        _instances[cache_dir] = IntelligentCacheManager(
+            cache_dir=cache_dir,
+            ttl_days=ttl_days,
+            similarity_threshold=similarity_threshold
+        )
+    return _instances[cache_dir]
+
+
+def _reset_instances() -> None:
+    """Clear the shared instance registry. Intended for tests only."""
+    _instances.clear()

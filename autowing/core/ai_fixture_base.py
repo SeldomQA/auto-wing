@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 from loguru import logger
 
-from autowing.core.cache.cache_manager import IntelligentCacheManager
+from autowing.core.cache.cache_manager import get_intelligent_cache_manager
 
 
 class AiFixtureBase:
@@ -15,7 +15,10 @@ class AiFixtureBase:
 
     def __init__(self):
         """Initialize the base fixture with intelligent cache support."""
-        self.cache_manager = IntelligentCacheManager()
+        # Share one cache manager per cache_dir across all fixtures so the
+        # TF-IDF index is built once and cache hits work across test cases.
+        cache_dir = os.getenv("AUTOWING_CACHE_DIR", ".auto-wing/cache")
+        self.cache_manager = get_intelligent_cache_manager(cache_dir=cache_dir)
         # Vision mode switch: enabled via AUTOWING_VISION env var or enable_vision()
         self._vision_enabled = os.getenv("AUTOWING_VISION", "false").lower() in ("1", "true", "yes")
 
