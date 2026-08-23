@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Any, Optional
 
@@ -9,7 +10,7 @@ from autowing.core.cache.cache_manager import IntelligentCacheManager
 class AiFixtureBase:
     """
     Base class for AI Fixtures. Contains common response processing logic
-    shared between Playwright and Selenium fixtures.
+    shared between Playwright, Selenium and Appium fixtures.
     """
 
     def __init__(self):
@@ -180,6 +181,219 @@ class AiFixtureBase:
                 return [float(item) for item in result]
             except (ValueError, TypeError):
                 raise ValueError(f"Cannot convert results to numbers: {result}")
+
+    def _parse_format_hint(self, prompt: str) -> tuple:
+        """
+        Extract a leading format hint (e.g. 'string[]') from the prompt.
+
+        Args:
+            prompt (str): The raw query prompt
+
+        Returns:
+            tuple: (format_hint, remaining prompt). format_hint is '' when absent
+        """
+        if prompt.startswith(('string[]', 'number[]', 'object[]')):
+            parts = prompt.split(',', 1)
+            return parts[0].strip(), (parts[1].strip() if len(parts) > 1 else '')
+        return '', prompt
+
+    @staticmethod
+    def _get_context_summary(context: dict) -> str:
+        """
+        Build prompt header lines from known context keys so that web drivers
+        (url/title) and app drivers (activity/package) share one code path.
+        """
+        lines = []
+        if context.get('url'):
+            lines.append(f"Page: {context['url']}")
+        if context.get('title'):
+            lines.append(f"Title: {context['title']}")
+        if context.get('activity'):
+            lines.append(f"Activity: {context['activity']}")
+        if context.get('package'):
+            lines.append(f"Package: {context['package']}")
+        return "\n".join(lines)
+
+    def _llm_prompt_notice(self) -> str:
+        """
+        Extra prompt notice appended to query/assert prompts.
+        Overridden by the Appium fixture to hint about label/text keys.
+        """
+        return ""
+
+    def _build_query_prompt(self, context: dict, query: str, format_hint: str) -> str:
+        """Build the ai_query prompt for the requested format."""
+        ctx_summary = self._get_context_summary(context)
+        elements = json.dumps(context.get('elements', []), ensure_ascii=False)
+        notice = self._llm_prompt_notice()
+
+        if format_hint == 'string[]':
+            return f"""
+Extract text content matching the query. Return ONLY a JSON array of strings.
+
+{ctx_summary}
+Elements: {elements}
+Query: {query}
+
+Return format example: ["result1", "result2"]
+{notice}
+No other text or explanation.
+"""
+        if format_hint == 'number[]':
+            return f"""
+Extract numeric values matching the query. Return ONLY a JSON array of numbers.
+
+{ctx_summary}
+Elements: {elements}
+Query: {query}
+
+Return format example: [1, 2, 3]
+{notice}
+No other text or explanation.
+"""
+        # Default prompt
+        return f"""
+Extract information matching the query. Return ONLY in valid JSON format.
+
+{ctx_summary}
+Elements: {elements}
+Query: {query}
+
+Return format:
+- For arrays: ["item1", "item2"]
+- For objects: {{"key": "value"}}
+- For single value: "text" or number
+{notice}
+No other text or explanation.
+"""
+
+    @staticmethod
+    def _extract_query_from_text(cleaned_response: str, query: str, format_hint: str) -> Optional[list]:
+        """
+        Fallback extraction for 'string[]' queries when the LLM response is
+        not valid JSON. Returns a deduplicated list, or None when nothing found.
+        """
+        if format_hint != 'string[]':
+            return None
+
+        lines = [line.strip() for line in cleaned_response.split('\n')
+                 if line.strip() and not line.startswith(('-', '*', '#'))]
+
+        # Extract lines containing query terms
+        query_terms = [term.lower() for term in query.split()
+                       if len(term) > 2 and term.lower() not in ['the', 'and', 'for']]
+
+        results = []
+        for line in lines:
+            if any(term in line.lower() for term in query_terms):
+                text = line.strip('`"\'- ,')
+                if ':' in text:
+                    text = text.split(':', 1)[1].strip()
+                if text:
+                    results.append(text)
+
+        if results:
+            # Remove duplicates while preserving order
+            seen = set()
+            return [x for x in results if not (x in seen or seen.add(x))]
+        return None
+
+    @staticmethod
+    def _parse_boolean_response(cleaned_response: str) -> bool:
+        """Parse a cleaned LLM response into a boolean for ai_assert."""
+        if cleaned_response == 'true':
+            return True
+        if cleaned_response == 'false':
+            return False
+
+        # If the response contains other content, try extracting the boolean
+        if 'true' in cleaned_response.split():
+            return True
+        if 'false' in cleaned_response.split():
+            return False
+
+        raise ValueError(
+            f"Failed to parse assertion result. Response: {cleaned_response[:100]}... "
+            "Response must be 'true' or 'false'"
+        )
+
+    def ai_query(self, prompt: str) -> Any:
+        """
+        Query information from the page/screen using AI analysis.
+        Shared implementation for all drivers (Playwright / Selenium / Appium).
+
+        Args:
+            prompt (str): Natural language query about the page content.
+                         It can include format hints like 'string[]' or 'number[]'.
+
+        Returns:
+            Any: The query results in the requested format
+
+        Raises:
+            ValueError: If the AI response cannot be parsed into the requested format
+        """
+        logger.info(f"🪽 AI Query: {prompt}")
+        context = self._get_page_context()
+        context["elements"] = self._remove_empty_keys(context.get("elements", []))
+
+        format_hint, query = self._parse_format_hint(prompt)
+        query_prompt = self._build_query_prompt(context, query, format_hint)
+
+        response = self._llm_complete(query_prompt)
+
+        cleaned_response = ""
+        try:
+            cleaned_response = self._clean_response(response)
+            try:
+                result = json.loads(cleaned_response)
+                query_info = self._validate_result_format(result, format_hint)
+                logger.debug(f"📄 Query: {query_info}")
+                return query_info
+            except json.JSONDecodeError:
+                # Fallback: try extracting from plain text
+                extracted = self._extract_query_from_text(cleaned_response, query, format_hint)
+                if extracted:
+                    logger.debug(f"📄 Query: {extracted}")
+                    return extracted
+                raise ValueError(f"Failed to parse response as JSON: {cleaned_response[:100]}...")
+
+        except Exception as e:
+            raise ValueError(f"Query failed. Error: {str(e)}\nResponse: {cleaned_response[:100]}...")
+
+    def ai_assert(self, prompt: str) -> bool:
+        """
+        Verify a condition on the page/screen using AI analysis.
+        Shared implementation for all drivers (Playwright / Selenium / Appium).
+
+        Args:
+            prompt (str): Natural language description of the condition to verify
+
+        Returns:
+            bool: True if the condition is met, False otherwise
+
+        Raises:
+            ValueError: If the AI response cannot be parsed as a boolean value
+        """
+        logger.info(f"🪽 AI Assert: {prompt}")
+        context = self._get_page_context()
+        context["elements"] = self._remove_empty_keys(context.get("elements", []))
+
+        notice = self._llm_prompt_notice()
+        assert_prompt = f"""
+You are a web automation assistant. Verify the following assertion and return ONLY a boolean value.
+
+{self._get_context_summary(context)}
+Elements: {json.dumps(context['elements'], ensure_ascii=False)}
+
+Assertion: {prompt}
+
+{notice}
+IMPORTANT: Return ONLY the word 'true' or 'false' (lowercase). No other text, no explanation.
+"""
+
+        response = self._llm_complete(assert_prompt)
+        cleaned_response = self._clean_response(response).lower()
+        return self._parse_boolean_response(cleaned_response)
 
     def _get_cached_or_compute(self, prompt: str, context: dict, compute_func) -> Any:
         """
