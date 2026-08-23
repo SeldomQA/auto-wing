@@ -3,7 +3,7 @@ import json
 from typing import Any, Dict, Optional
 
 from loguru import logger
-from playwright.sync_api import Page
+from playwright.sync_api import Frame, FrameLocator, Locator, Page
 
 from autowing.core.ai_fixture_web import (
     AiFixtureWeb,
@@ -102,13 +102,21 @@ class PlaywrightAiFixture(AiFixtureWeb):
             return None
         if isinstance(frame, str):
             frame = self.page.frame_locator(frame)
-        if hasattr(frame, 'content_frame'):  # Frame or Locator
-            resolved = frame.content_frame()
+        if isinstance(frame, Frame):
+            return frame
+        if isinstance(frame, FrameLocator):
+            frame = frame.owner
+        if isinstance(frame, Locator):
+            # NOTE: Locator.content_frame() is broken in the sync API of some
+            # playwright versions ('FrameLocator' object is not callable), so
+            # resolve through the element handle instead.
+            handle = frame.element_handle()
+            if handle is None:
+                raise ValueError("Could not resolve frame: locator matched no element")
+            resolved = handle.content_frame()
             if resolved is None:
-                raise ValueError("Could not resolve frame: locator is not attached to an iframe")
+                raise ValueError("Could not resolve frame: element is not an iframe")
             return resolved
-        if hasattr(frame, 'owner'):  # FrameLocator -> Locator -> Frame
-            return self._resolve_frame(frame.owner)
         raise TypeError(f"Unsupported frame reference: {type(frame)!r}")
 
     def ai_action(self, prompt: str, frame=None, **kwargs) -> None:
