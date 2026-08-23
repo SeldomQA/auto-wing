@@ -21,6 +21,12 @@ class AiFixtureBase:
         self.cache_manager = get_intelligent_cache_manager(cache_dir=cache_dir)
         # Vision mode switch: enabled via AUTOWING_VISION env var or enable_vision()
         self._vision_enabled = os.getenv("AUTOWING_VISION", "false").lower() in ("1", "true", "yes")
+        # Retry/re-plan budget for ai_action (JSON parse retries and execution
+        # retries). Configurable via AUTOWING_MAX_RETRIES, defaults to 2.
+        try:
+            self._max_action_retries = max(0, int(os.getenv("AUTOWING_MAX_RETRIES", "2")))
+        except ValueError:
+            self._max_action_retries = 2
 
     def enable_vision(self, enabled: bool = True):
         """
@@ -397,6 +403,92 @@ IMPORTANT: Return ONLY the word 'true' or 'false' (lowercase). No other text, no
         response = self._llm_complete(assert_prompt)
         cleaned_response = self._clean_response(response).lower()
         return self._parse_boolean_response(cleaned_response)
+
+    def _llm_json_with_retry(self, base_prompt: str, validate) -> Any:
+        """
+        Call the LLM for a JSON response, retrying with error feedback when
+        the response is not valid JSON or fails structural validation.
+
+        Args:
+            base_prompt (str): The initial prompt
+            validate: Callable(parsed) -> parsed; must raise ValueError when
+                      the parsed structure is unusable
+
+        Returns:
+            Any: The validated, parsed JSON value
+
+        Raises:
+            ValueError: When every attempt produced an unusable response
+        """
+        last_error: Optional[Exception] = None
+        response_preview = ""
+        total_attempts = self._max_action_retries + 1
+
+        for attempt in range(total_attempts):
+            prompt = base_prompt
+            if attempt > 0:
+                prompt += (
+                    f"\nIMPORTANT: your previous response could not be used: {last_error}\n"
+                    f"Previous response (truncated): {response_preview[:200]}\n"
+                    "Respond with ONLY the valid JSON described in the original request.\n"
+                )
+            response = self._llm_complete(prompt)
+            response_preview = self._clean_response(response)
+            try:
+                return validate(json.loads(response_preview))
+            except (json.JSONDecodeError, ValueError) as e:
+                last_error = e
+                logger.warning(f"⚠️ Unusable LLM JSON response "
+                               f"(attempt {attempt + 1}/{total_attempts}): {e}")
+
+        logger.error(f"❌ LLM response unusable after {total_attempts} attempts: "
+                     f"{response_preview[:200]}...")
+        raise ValueError(f"LLM returned invalid JSON format: {last_error}")
+
+    def _ai_action_loop(self, prompt: str, context: dict, compute_action, execute_action) -> None:
+        """
+        Execute-verify-replan loop shared by all drivers' ai_action.
+
+        The instruction is fetched from cache or computed once, then executed.
+        On any execution failure the failing cache entry is evicted and the
+        LLM is asked to re-plan with the error as extra context, up to
+        self._max_action_retries times. A replanned instruction that finally
+        succeeds replaces the cached one.
+
+        Args:
+            prompt (str): The user prompt for the action
+            context (dict): Page context used for cache matching
+            compute_action: Callable(error_hint: str = "") -> dict instruction
+            execute_action: Callable(instruction: dict, from_cache: bool) -> None
+
+        Raises:
+            Exception: The last execution error when all attempts failed
+        """
+        instruction = self._get_cached_or_compute(prompt, context, compute_action)
+        from_cache = instruction.pop('_from_cache', False) if isinstance(instruction, dict) else False
+        total_attempts = self._max_action_retries + 1
+
+        last_error: Optional[Exception] = None
+        for attempt in range(total_attempts):
+            try:
+                execute_action(instruction, from_cache)
+                if attempt > 0:
+                    # The replanned instruction worked: refresh the cache
+                    self.cache_manager.set_intelligent(prompt, context, instruction)
+                return
+            except Exception as e:
+                last_error = e
+                if attempt >= self._max_action_retries:
+                    break
+                # Evict the failing instruction before re-planning
+                self.cache_manager.invalidate(prompt, context)
+                from_cache = False
+                logger.warning(f"⚠️ Action attempt {attempt + 1}/{total_attempts} failed: {e}. "
+                               f"Re-planning with error context...")
+                instruction = compute_action(str(e))
+
+        logger.error(f"❌ ai_action failed after {total_attempts} attempts: {last_error}")
+        raise last_error
 
     def _get_cached_or_compute(self, prompt: str, context: dict, compute_func) -> Any:
         """

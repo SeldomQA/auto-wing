@@ -187,6 +187,10 @@ class PlaywrightAiFixture(AiFixtureWeb):
         """
         Execute an AI-driven action on the page based on the given prompt.
 
+        Failed attempts trigger a re-plan: the LLM is called again with the
+        error as extra context (up to AUTOWING_MAX_RETRIES, default 2).
+        A replanned instruction that succeeds replaces the cached one.
+
         Args:
             prompt (str): Natural language description of the action to perform
             **kwargs: Additional arguments for framework-specific implementations
@@ -198,7 +202,14 @@ class PlaywrightAiFixture(AiFixtureWeb):
         context = self._get_page_context()
         context["elements"] = self._remove_empty_keys(context.get("elements", []))
 
-        def compute_action():
+        def validate_instruction(result):
+            # Strict validation of required fields
+            for field in ('selector', 'action'):
+                if field not in result:
+                    raise ValueError(f"Missing required field '{field}'. Got fields: {list(result.keys())}")
+            return result
+
+        def compute_action(error_hint: str = "") -> dict:
             # Most strict prompt, force specific field names
             action_prompt = f"""
 You are a web automation assistant. Generate EXACT JSON with these SPECIFIC field names:
@@ -228,38 +239,26 @@ EXAMPLE:
 
 RESPONSE (JSON ONLY):
 """
+            if error_hint:
+                action_prompt += f"""
+NOTICE: A previous attempt on this page failed with: {error_hint}
+Re-plan carefully to avoid the same problem.
+"""
+            return self._llm_json_with_retry(action_prompt, validate_instruction)
 
-            response = self._llm_complete(action_prompt)
-            cleaned_response = self._clean_response(response)
+        self._ai_action_loop(prompt, context, compute_action, self._execute_action_instruction)
 
-            # Validate response is valid JSON
-            try:
-                result = json.loads(cleaned_response)
-                # Strict validation of required fields
-                required_fields = ['selector', 'action']
-                for field in required_fields:
-                    if field not in result:
-                        raise ValueError(f"Missing required field '{field}'. Got fields: {list(result.keys())}")
-                return result
-            except json.JSONDecodeError as e:
-                logger.error(f"❌ JSON parsing failed. Response content: {cleaned_response[:200]}...")
-                raise ValueError(f"LLM returned invalid JSON format: {e}")
+    def _execute_action_instruction(self, instruction: dict, from_cache: bool = False) -> None:
+        """
+        Execute one parsed ai_action instruction on the page.
 
-        # Use cache manager to get or compute the instruction
-        instruction = self._get_cached_or_compute(prompt, context, compute_action)
-        from_cache = instruction.pop('_from_cache', False) if isinstance(instruction, dict) else False
+        Args:
+            instruction (dict): Parsed LLM instruction (selector/action/value/key)
+            from_cache (bool): Whether the instruction came from the cache
 
-        # Stale-cache fallback: a cached selector may no longer exist after a
-        # page redesign. When the locator matches nothing and a cache entry
-        # was evicted, recompute the instruction once via the LLM.
-        cached_selector = instruction.get('selector')
-        if from_cache and cached_selector and self.page.locator(selector_to_locator(cached_selector)).count() == 0:
-            if self.cache_manager.invalidate(prompt, context):
-                logger.warning("⚠️ Cached action instruction no longer locates any element, "
-                               "cache evicted; recomputing via LLM")
-                instruction = self._get_cached_or_compute(prompt, context, compute_action)
-
-        # Execute the action using the instruction
+        Raises:
+            ValueError: If the instruction is invalid or the cached selector is stale
+        """
         selector = instruction.get('selector')
         action = instruction.get('action')
 
@@ -269,6 +268,11 @@ RESPONSE (JSON ONLY):
         # Perform the action
         selector = selector_to_locator(selector)
         element = self.page.locator(selector)
+
+        # Stale-cache guard: a cached selector may no longer exist after a
+        # page redesign. Fail fast so the retry loop can re-plan.
+        if from_cache and element.count() == 0:
+            raise ValueError(f"Cached selector matched no elements: {selector}")
 
         if action == 'click':
             element.click()

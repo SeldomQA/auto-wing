@@ -113,6 +113,9 @@ class AppiumAiFixture(AiFixtureBase):
         """
         Execute an AI-driven action on the screen based on the given prompt.
 
+        Failed attempts trigger a re-plan: the LLM is called again with the
+        error as extra context (up to AUTOWING_MAX_RETRIES, default 2).
+
         Args:
             prompt (str): Natural language description of the action to perform
 
@@ -123,7 +126,13 @@ class AppiumAiFixture(AiFixtureBase):
         logger.info(f"🪽 AI Action: {prompt}")
         context = self._get_page_context()
 
-        action_prompt = f"""
+        def validate_instruction(instruction):
+            if isinstance(instruction, list) is False:
+                raise ValueError("Invalid instruction format")
+            return instruction
+
+        def compute_action(error_hint: str = "") -> list:
+            action_prompt = f"""
 Extract element locator and action from the request. Return ONLY a JSON object.
 
 Activity: {context['activity']}
@@ -141,14 +150,40 @@ Return list format:
 
 No other text or explanation.
 """
+            if error_hint:
+                action_prompt += f"""
+NOTICE: A previous attempt on this screen failed with: {error_hint}
+Re-plan carefully to avoid the same problem.
+"""
+            return self._llm_json_with_retry(action_prompt, validate_instruction)
 
-        response = self._llm_complete(action_prompt)
-        cleaned_response = self._clean_response(response)
-        instruction = json.loads(cleaned_response)
+        instruction = compute_action()
+        total_attempts = self._max_action_retries + 1
+        last_error = None
+        for attempt in range(total_attempts):
+            try:
+                self._execute_action_instruction(instruction)
+                return
+            except Exception as e:
+                last_error = e
+                if attempt >= self._max_action_retries:
+                    break
+                logger.warning(f"⚠️ Action attempt {attempt + 1}/{total_attempts} failed: {e}. "
+                               f"Re-planning with error context...")
+                instruction = compute_action(str(e))
+        logger.error(f"❌ ai_action failed after {total_attempts} attempts: {last_error}")
+        raise last_error
 
-        if isinstance(instruction, list) is False:
-            raise ValueError("Invalid instruction format")
+    def _execute_action_instruction(self, instruction: list) -> None:
+        """
+        Execute parsed ai_action steps on the screen.
 
+        Args:
+            instruction (list): Parsed LLM steps (bounds/action/value/key)
+
+        Raises:
+            ValueError: If a step is invalid or contains an unsupported action
+        """
         for step in instruction:
             bounds = step.get('bounds')
             action = step.get('action')
