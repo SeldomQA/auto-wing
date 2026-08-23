@@ -286,13 +286,15 @@ No other text or explanation.
         """
         logger.info(f"🪽 AI Assert: {prompt}")
         context = self._get_page_context()
+        context["elements"] = self._remove_empty_keys(context.get("elements", []))
 
         assert_prompt = f"""
 You are a web automation assistant. Verify the following assertion and return ONLY a boolean value.
 
 Activity: {context['activity']}
 Package: {context['package']}
-Elements: {context['elements']}
+Elements: {json.dumps(context['elements'], ensure_ascii=False)}
+
 Assertion: {prompt}
 
 (notice: Gets value data from labels and text keys)

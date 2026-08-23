@@ -401,6 +401,7 @@ You are a web automation assistant. Verify the following assertion and return ON
 
 Page URL: {context['url']}
 Page Title: {context['title']}
+Elements: {json.dumps(context['elements'], ensure_ascii=False)}
 
 Assertion: {prompt}
 
