@@ -247,6 +247,17 @@ RESPONSE (JSON ONLY):
 
         # Use cache manager to get or compute the instruction
         instruction = self._get_cached_or_compute(prompt, context, compute_action)
+        from_cache = instruction.pop('_from_cache', False) if isinstance(instruction, dict) else False
+
+        # Stale-cache fallback: a cached selector may no longer exist after a
+        # page redesign. When the locator matches nothing and a cache entry
+        # was evicted, recompute the instruction once via the LLM.
+        cached_selector = instruction.get('selector')
+        if from_cache and cached_selector and self.page.locator(selector_to_locator(cached_selector)).count() == 0:
+            if self.cache_manager.invalidate(prompt, context):
+                logger.warning("⚠️ Cached action instruction no longer locates any element, "
+                               "cache evicted; recomputing via LLM")
+                instruction = self._get_cached_or_compute(prompt, context, compute_action)
 
         # Execute the action using the instruction
         selector = instruction.get('selector')

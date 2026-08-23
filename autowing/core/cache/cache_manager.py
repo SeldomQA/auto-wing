@@ -358,6 +358,54 @@ class IntelligentCacheManager:
         
         logger.debug(f"💾 Intelligent cache saved: {prompt}")
 
+    def invalidate(self, prompt: str, context: dict) -> bool:
+        """
+        Remove cache entries that would match the given prompt + context.
+
+        Uses the same matching rule as get_intelligent(): identical context
+        hash and semantic similarity >= threshold, plus the exact-key entry.
+        Intended as a stale-cache fallback: when a cached locator stops
+        working (e.g. after a page redesign), evict it so the next call
+        recomputes via the LLM.
+
+        Args:
+            prompt: The prompt used for the cached instruction
+            context: Current context information
+
+        Returns:
+            bool: True when at least one entry was removed
+        """
+        context_hash = self._generate_context_hash(context)
+        exact_key = hashlib.md5(f"{prompt}:{context_hash}".encode()).hexdigest()
+
+        stale_entries: List[CacheEntry] = []
+        for entry in self.cache_entries:
+            if entry.context_hash != context_hash:
+                continue
+            if entry.key == exact_key:
+                stale_entries.append(entry)
+                continue
+            if self.prompt_vectors and self._calculate_similarity(prompt, entry.prompt) >= self.similarity_threshold:
+                stale_entries.append(entry)
+
+        if not stale_entries:
+            return False
+
+        for entry in stale_entries:
+            self.cache_entries.remove(entry)
+            cache_path = os.path.join(self.cache_dir, f"{entry.key}.json")
+            if os.path.exists(cache_path):
+                os.remove(cache_path)
+            logger.debug(f"🗑️ Cache entry invalidated: {entry.prompt}")
+
+        # Rebuild similarity index
+        if self.cache_entries:
+            prompts = [e.prompt for e in self.cache_entries]
+            self.prompt_vectors = self.vectorizer.fit_transform(prompts)
+        else:
+            self.prompt_vectors = []
+        return True
+
     def get_statistics(self) -> Dict[str, Any]:
         """Get cache statistics"""
         total_entries = len(self.cache_entries)

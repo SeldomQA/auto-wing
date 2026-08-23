@@ -413,6 +413,10 @@ IMPORTANT: Return ONLY the word 'true' or 'false' (lowercase). No other text, no
         # Try to get from cache first
         cached_response = self.cache_manager.get_intelligent(prompt, context)
         if cached_response is not None:
+            # Mark the source so callers (e.g. ai_action stale-cache
+            # fallback) can distinguish cache hits from fresh results.
+            if isinstance(cached_response, dict):
+                cached_response.setdefault('_from_cache', True)
             return cached_response
 
         # Compute new result

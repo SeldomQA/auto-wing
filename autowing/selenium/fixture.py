@@ -210,6 +210,24 @@ class SeleniumAiFixture(AiFixtureWeb):
         """Capture the current page viewport as a base64-encoded PNG image."""
         return self.driver.get_screenshot_as_base64()
 
+    def _locate_element(self, selector: str):
+        """
+        Locate an element by XPath first, falling back to CSS selector.
+
+        Args:
+            selector (str): XPath or CSS selector
+
+        Returns:
+            WebElement: The located element
+
+        Raises:
+            TimeoutException: If the element cannot be found by either strategy
+        """
+        try:
+            return self.wait.until(EC.presence_of_element_located((By.XPATH, selector)))
+        except TimeoutException:
+            return self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+
     def ai_action(self, prompt: str) -> None:
         """
         Execute an AI-driven action on the page based on the given prompt.
@@ -274,6 +292,7 @@ RESPONSE (JSON ONLY):
 
         # Use cache manager to get or compute the instruction
         instruction = self._get_cached_or_compute(prompt, context, compute_action)
+        from_cache = instruction.pop('_from_cache', False) if isinstance(instruction, dict) else False
         
         # Execute the action using the instruction
         selector = instruction.get('selector')
@@ -285,9 +304,21 @@ RESPONSE (JSON ONLY):
         # Execute the action
         selector = selector_to_selenium(selector)
         try:
-            element = self.wait.until(EC.presence_of_element_located((By.XPATH, selector)))
+            element = self._locate_element(selector)
         except TimeoutException:
-            element = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+            # Stale-cache fallback: a cached selector may no longer exist
+            # after a page redesign. Evict the cache entry (if any) and
+            # recompute the instruction once via the LLM.
+            if not from_cache or not self.cache_manager.invalidate(prompt, context):
+                raise
+            logger.warning("⚠️ Cached action instruction no longer locates any element, "
+                           "cache evicted; recomputing via LLM")
+            instruction = self._get_cached_or_compute(prompt, context, compute_action)
+            selector = instruction.get('selector')
+            action = instruction.get('action')
+            if not selector or not action:
+                raise ValueError("Invalid instruction format")
+            element = self._locate_element(selector_to_selenium(selector))
 
         if action == 'click':
             element.click()
