@@ -5,7 +5,12 @@ from typing import Any, Dict, Optional
 from loguru import logger
 from playwright.sync_api import Page
 
-from autowing.core.ai_fixture_web import AiFixtureWeb
+from autowing.core.ai_fixture_web import (
+    AiFixtureWeb,
+    build_clear_markers_script,
+    build_elements_collection_script,
+    build_marker_injection_script,
+)
 from autowing.core.llm.factory import LLMFactory
 from autowing.utils.transition import selector_to_locator
 
@@ -37,63 +42,9 @@ class PlaywrightAiFixture(AiFixtureWeb):
         return self.cache_manager.get_statistics()
 
     def _execute_marker_injection_script(self) -> Any:
-        """Execute the JavaScript marker injection script for Playwright."""
-        marker_script = """
-        (() => {
-            // Function to generate unique ID
-            function generateUniqueId() {
-                return 'aw-' + Math.random().toString(36).substr(2, 9);
-            }
-            
-            // Define element selectors that need marking
-            const selectors = [
-                'input:not([type="hidden"])',
-                'textarea',
-                'select',
-                'button',
-                'a[href]',
-                '[role="button"]',
-                '[role="link"]',
-                '[role="checkbox"]',
-                '[role="radio"]',
-                '[role="searchbox"]',
-                'summary',
-                '[contenteditable="true"]',
-                '[tabindex]:not([tabindex="-1"])'
-            ];
-            
-            const markers = [];
-            
-            selectors.forEach(selector => {
-                document.querySelectorAll(selector).forEach(element => {
-                    // Skip already marked elements
-                    if (element.hasAttribute('data-autowing-id')) {
-                        return;
-                    }
-                    
-                    // Generate unique ID
-                    const uniqueId = generateUniqueId();
-                    element.setAttribute('data-autowing-id', uniqueId);
-                    
-                    // Collect element information
-                    markers.push({
-                        id: uniqueId,
-                        tagName: element.tagName.toLowerCase(),
-                        type: element.getAttribute('type') || null,
-                        placeholder: element.getAttribute('placeholder') || null,
-                        value: element.value || null,
-                        textContent: element.textContent?.trim().substring(0, 100) || '',
-                        ariaLabel: element.getAttribute('aria-label') || null,
-                        role: element.getAttribute('role') || null,
-                        boundingBox: element.getBoundingClientRect()
-                    });
-                });
-            });
-            
-            return markers;
-        })();
-        """
-        return self.page.evaluate(marker_script)
+        """Execute the shared marker injection script (covers same-origin
+        iframes and open shadow roots)."""
+        return self.page.evaluate(build_marker_injection_script())
 
     def _get_basic_page_info(self) -> Dict[str, str]:
         """Get basic page information for Playwright."""
@@ -103,56 +54,9 @@ class PlaywrightAiFixture(AiFixtureWeb):
         }
 
     def _execute_elements_script(self) -> Any:
-        """Execute JavaScript to get page elements information for Playwright."""
-        return self.page.evaluate("""() => {
-            const getVisibleElements = () => {
-                const elements = [];
-                const selectors = [
-                    'input',
-                    'textarea',
-                    'select',
-                    'button',
-                    'a',
-                    '[role="button"]',
-                    '[role="link"]',
-                    '[role="checkbox"]',
-                    '[role="radio"]',
-                    '[role="searchbox"]',
-                    'summary',
-                    '[draggable="true"]'
-                ];
-                
-                for (const selector of selectors) {
-                    document.querySelectorAll(selector).forEach(el => {
-                        if (el.offsetWidth > 0 && el.offsetHeight > 0) {
-                            elements.push({
-                                tag: el.tagName.toLowerCase(),
-                                type: el.getAttribute('type') || null,
-                                placeholder: el.getAttribute('placeholder') || null,
-                                value: el.value || null,
-                                text: el.textContent?.trim() || '',
-                                aria: el.getAttribute('aria-label') || null,
-                                id: el.id || '',
-                                name: el.getAttribute('name') || null,
-                                class: el.className || '',
-                                draggable: el.getAttribute('draggable') || null,
-                                // New addition: include autowing marker ID
-                                autowingId: el.getAttribute('data-autowing-id') || null,
-                                // New addition: element position information
-                                boundingBox: {
-                                    x: el.getBoundingClientRect().x,
-                                    y: el.getBoundingClientRect().y,
-                                    width: el.getBoundingClientRect().width,
-                                    height: el.getBoundingClientRect().height
-                                }
-                            });
-                        }
-                    });
-                }
-                return elements;
-            };
-            return getVisibleElements();
-        }""")
+        """Execute the shared element collection script (covers same-origin
+        iframes and open shadow roots)."""
+        return self.page.evaluate(build_elements_collection_script())
 
     def _find_element_by_marker(self, marker_id: str):
         """
@@ -169,11 +73,7 @@ class PlaywrightAiFixture(AiFixtureWeb):
 
     def _clear_element_markers_script(self) -> str:
         """Get JavaScript code to clear all element markers for Playwright."""
-        return """
-            document.querySelectorAll('[data-autowing-id]').forEach(el => {
-                el.removeAttribute('data-autowing-id');
-            });
-        """
+        return build_clear_markers_script()
 
     def _execute_javascript(self, script: str) -> Any:
         """Execute JavaScript code for Playwright."""
@@ -183,7 +83,35 @@ class PlaywrightAiFixture(AiFixtureWeb):
         """Capture the current page viewport as a base64-encoded PNG image."""
         return base64.b64encode(self.page.screenshot()).decode('utf-8')
 
-    def ai_action(self, prompt: str, **kwargs) -> None:
+    def _resolve_frame(self, frame):
+        """
+        Resolve a frame reference into a Playwright Frame.
+
+        Args:
+            frame: A Frame (returned as-is), a FrameLocator / Locator pointing
+                   at the iframe element, or a CSS/XPath selector string for it
+
+        Returns:
+            Frame: The resolved frame
+
+        Raises:
+            ValueError: If a locator cannot be resolved to a frame
+            TypeError: If the frame reference type is unsupported
+        """
+        if frame is None:
+            return None
+        if isinstance(frame, str):
+            frame = self.page.frame_locator(frame)
+        if hasattr(frame, 'content_frame'):  # Frame or Locator
+            resolved = frame.content_frame()
+            if resolved is None:
+                raise ValueError("Could not resolve frame: locator is not attached to an iframe")
+            return resolved
+        if hasattr(frame, 'owner'):  # FrameLocator -> Locator -> Frame
+            return self._resolve_frame(frame.owner)
+        raise TypeError(f"Unsupported frame reference: {type(frame)!r}")
+
+    def ai_action(self, prompt: str, frame=None, **kwargs) -> None:
         """
         Execute an AI-driven action on the page based on the given prompt.
 
@@ -193,12 +121,17 @@ class PlaywrightAiFixture(AiFixtureWeb):
 
         Args:
             prompt (str): Natural language description of the action to perform
+            frame: Optional frame scope for the action - a Frame, FrameLocator,
+                   Locator pointing at the iframe element, or a selector string.
+                   When given, the resolved selector is located within that
+                   frame instead of the whole page.
             **kwargs: Additional arguments for framework-specific implementations
 
         Raises:
             ValueError: If the AI response cannot be parsed or contains invalid instructions
         """
         logger.info(f"🪽 AI Action: {prompt}")
+        target_frame = self._resolve_frame(frame)
         context = self._get_page_context()
         context["elements"] = self._remove_empty_keys(context.get("elements", []))
 
@@ -246,15 +179,23 @@ Re-plan carefully to avoid the same problem.
 """
             return self._llm_json_with_retry(action_prompt, validate_instruction)
 
-        self._ai_action_loop(prompt, context, compute_action, self._execute_action_instruction)
+        if target_frame is not None:
+            execute_action = (lambda instruction, from_cache:
+                              self._execute_action_instruction(instruction, from_cache,
+                                                               frame=target_frame))
+        else:
+            execute_action = self._execute_action_instruction
+        self._ai_action_loop(prompt, context, compute_action, execute_action)
 
-    def _execute_action_instruction(self, instruction: dict, from_cache: bool = False) -> None:
+    def _execute_action_instruction(self, instruction: dict, from_cache: bool = False,
+                                    frame=None) -> None:
         """
         Execute one parsed ai_action instruction on the page.
 
         Args:
             instruction (dict): Parsed LLM instruction (selector/action/value/key)
             from_cache (bool): Whether the instruction came from the cache
+            frame: Optional Playwright Frame to scope locator resolution to
 
         Raises:
             ValueError: If the instruction is invalid or the cached selector is stale
@@ -267,7 +208,8 @@ Re-plan carefully to avoid the same problem.
 
         # Perform the action
         selector = selector_to_locator(selector)
-        element = self.page.locator(selector)
+        scope = frame if frame is not None else self.page
+        element = scope.locator(selector)
 
         # Stale-cache guard: a cached selector may no longer exist after a
         # page redesign. Fail fast so the retry loop can re-plan.

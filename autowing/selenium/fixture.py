@@ -9,7 +9,12 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from autowing.core.ai_fixture_web import AiFixtureWeb
+from autowing.core.ai_fixture_web import (
+    AiFixtureWeb,
+    build_clear_markers_script,
+    build_elements_collection_script,
+    build_marker_injection_script,
+)
 from autowing.core.llm.factory import LLMFactory
 from autowing.utils.transition import selector_to_selenium
 
@@ -43,74 +48,11 @@ class SeleniumAiFixture(AiFixtureWeb):
         return self.cache_manager.get_statistics()
 
     def _execute_marker_injection_script(self) -> Any:
-        """Execute the JavaScript marker injection script for Selenium."""
-        marker_script = """
-        (() => {
-            // Function to generate unique ID
-            function generateUniqueId() {
-                return 'aw-' + Math.random().toString(36).substr(2, 9);
-            }
-            
-            // Define element selectors that need marking
-            const selectors = [
-                'input:not([type="hidden"])',
-                'textarea',
-                'select',
-                'button',
-                'a[href]',
-                '[role="button"]',
-                '[role="link"]',
-                '[role="checkbox"]',
-                '[role="radio"]',
-                '[role="searchbox"]',
-                'summary',
-                '[contenteditable="true"]',
-                '[tabindex]:not([tabindex="-1"])'
-            ];
-            
-            const markers = [];
-            
-            selectors.forEach((selector) => {
-                const elements = document.querySelectorAll(selector);
-                elements.forEach((element) => {
-                    // Skip already marked elements
-                    if (element.hasAttribute('data-autowing-id')) {
-                        return;
-                    }
-                    
-                    // Skip invisible elements
-                    if (element.offsetWidth <= 0 || element.offsetHeight <= 0) {
-                        return;
-                    }
-                    
-                    // Generate unique ID
-                    const uniqueId = generateUniqueId();
-                    element.setAttribute('data-autowing-id', uniqueId);
-                    
-                    // Collect element information (same as Playwright)
-                    markers.push({
-                        id: uniqueId,
-                        tagName: element.tagName.toLowerCase(),
-                        type: element.getAttribute('type') || null,
-                        placeholder: element.getAttribute('placeholder') || null,
-                        value: element.value || null,
-                        textContent: element.textContent ? element.textContent.trim().substring(0, 100) : '',
-                        ariaLabel: element.getAttribute('aria-label') || null,
-                        role: element.getAttribute('role') || null,
-                        boundingBox: {
-                            x: element.getBoundingClientRect().x,
-                            y: element.getBoundingClientRect().y,
-                            width: element.getBoundingClientRect().width,
-                            height: element.getBoundingClientRect().height
-                        }
-                    });
-                });
-            });
-            
-            return markers;
-        })();
-        """
-        return self.driver.execute_script(marker_script)
+        """Execute the shared marker injection script (covers same-origin
+        iframes and open shadow roots)."""
+        # NOTE: "return" must stay on the same line as the IIFE expression,
+        # otherwise JavaScript ASI turns it into "return;".
+        return self.driver.execute_script("return " + build_marker_injection_script())
 
     def _get_basic_page_info(self) -> Dict[str, str]:
         """Get basic page information for Selenium."""
@@ -120,60 +62,11 @@ class SeleniumAiFixture(AiFixtureWeb):
         }
 
     def _execute_elements_script(self) -> Any:
-        """Execute JavaScript to get page elements information for Selenium."""
-        elements_script = """
-            return (function() {
-                var getVisibleElements = function() {
-                    var elements = [];
-                    var selectors = [
-                        'input',
-                        'textarea',
-                        'select',
-                        'button',
-                        'a',
-                        '[role="button"]',
-                        '[role="link"]',
-                        '[role="checkbox"]',
-                        '[role="radio"]',
-                        '[role="searchbox"]',
-                        'summary',
-                        '[draggable="true"]'
-                    ];
-                    
-                    selectors.forEach(function(selector) {
-                        var els = document.querySelectorAll(selector);
-                        els.forEach(function(el) {
-                            if (el.offsetWidth > 0 && el.offsetHeight > 0) {
-                                elements.push({
-                                    tag: el.tagName.toLowerCase(),
-                                    type: el.getAttribute('type') || null,
-                                    placeholder: el.getAttribute('placeholder') || null,
-                                    value: el.value || null,
-                                    text: el.textContent ? el.textContent.trim() : '',
-                                    aria: el.getAttribute('aria-label') || null,
-                                    id: el.id || '',
-                                    name: el.getAttribute('name') || null,
-                                    class: el.className || '',
-                                    draggable: el.getAttribute('draggable') || null,
-                                    // New addition: include autowing marker ID
-                                    autowingId: el.getAttribute('data-autowing-id') || null,
-                                    // New addition: element position information
-                                    boundingBox: {
-                                        x: el.getBoundingClientRect().x,
-                                        y: el.getBoundingClientRect().y,
-                                        width: el.getBoundingClientRect().width,
-                                        height: el.getBoundingClientRect().height
-                                    }
-                                });
-                            }
-                        });
-                    });
-                    return elements;
-                };
-                return getVisibleElements();
-            })();
-        """
-        return self.driver.execute_script(elements_script)
+        """Execute the shared element collection script (covers same-origin
+        iframes and open shadow roots)."""
+        # NOTE: "return" must stay on the same line as the IIFE expression,
+        # otherwise JavaScript ASI turns it into "return;".
+        return self.driver.execute_script("return " + build_elements_collection_script())
 
     def _find_element_by_marker(self, marker_id: str):
         """
@@ -185,22 +78,54 @@ class SeleniumAiFixture(AiFixtureWeb):
         Returns:
             WebElement: Selenium element object
         """
+        selector = f'[data-autowing-id="{marker_id}"]'
         try:
-            return self.driver.find_element(By.CSS_SELECTOR, f'[data-autowing-id="{marker_id}"]')
-        except:
+            return self.driver.find_element(By.CSS_SELECTOR, selector)
+        except Exception:
+            # Markers may live inside nested frames reached by the shared
+            # injection script; find_element only searches the current frame.
+            found = self._find_in_frames(By.CSS_SELECTOR, selector)
+            if found is not None:
+                return found
             # Fallback to wait for elements
             return self.wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, f'[data-autowing-id="{marker_id}"]'))
+                EC.presence_of_element_located((By.CSS_SELECTOR, selector))
             )
+
+    def _find_in_frames(self, by: str, value: str):
+        """
+        Recursively search child frames for an element.
+
+        When found, the driver stays switched into the containing frame so
+        the caller can interact with the element directly. When not found,
+        the frame state is restored before returning.
+
+        Args:
+            by (str): Selenium By strategy
+            value (str): Locator value
+
+        Returns:
+            Optional[WebElement]: The element, or None when not found
+        """
+        frames = (self.driver.find_elements(By.TAG_NAME, 'iframe')
+                  + self.driver.find_elements(By.TAG_NAME, 'frame'))
+        for frame in frames:
+            try:
+                self.driver.switch_to.frame(frame)
+            except Exception:
+                continue
+            found = self.driver.find_elements(by, value)
+            if found:
+                return found[0]
+            deeper = self._find_in_frames(by, value)
+            if deeper is not None:
+                return deeper
+            self.driver.switch_to.parent_frame()
+        return None
 
     def _clear_element_markers_script(self) -> str:
         """Get JavaScript code to clear all element markers for Selenium."""
-        return """
-            var elements = document.querySelectorAll('[data-autowing-id]');
-            elements.forEach(function(el) {
-                el.removeAttribute('data-autowing-id');
-            });
-        """
+        return build_clear_markers_script()
 
     def _execute_javascript(self, script: str) -> Any:
         """Execute JavaScript code for Selenium."""

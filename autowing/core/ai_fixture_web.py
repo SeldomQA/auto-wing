@@ -9,6 +9,191 @@ from loguru import logger
 from autowing.core.ai_fixture_base import AiFixtureBase
 
 
+# ---------------------------------------------------------------------------
+# Shared browser-side scripts
+#
+# Playwright and Selenium run the exact same traversal logic so that marker
+# injection, element collection and marker cleanup cover same-origin iframes
+# and open shadow roots identically on both drivers. Cross-origin frames are
+# skipped silently (their contentDocument is not accessible).
+# ---------------------------------------------------------------------------
+
+_INTERACTIVE_SELECTORS_JS = """[
+                'input:not([type="hidden"])',
+                'textarea',
+                'select',
+                'button',
+                'a[href]',
+                '[role="button"]',
+                '[role="link"]',
+                '[role="checkbox"]',
+                '[role="radio"]',
+                '[role="searchbox"]',
+                'summary',
+                '[contenteditable="true"]',
+                '[tabindex]:not([tabindex="-1"])'
+            ]"""
+
+_ELEMENT_SELECTORS_JS = """[
+                    'input',
+                    'textarea',
+                    'select',
+                    'button',
+                    'a',
+                    '[role="button"]',
+                    '[role="link"]',
+                    '[role="checkbox"]',
+                    '[role="radio"]',
+                    '[role="searchbox"]',
+                    'summary',
+                    '[draggable="true"]'
+                ]"""
+
+# Recursive scope walker: visits a document/shadow root, then descends into
+# every open shadow root and same-origin iframe/frame document (depth capped).
+_SCOPE_WALKER_JS = """
+            function awWalkScopes(scope, frameDepth, handler) {
+                handler(scope, frameDepth);
+                scope.querySelectorAll('*').forEach(function (el) {
+                    if (el.shadowRoot) {
+                        awWalkScopes(el.shadowRoot, frameDepth, handler);
+                    }
+                    if ((el.tagName === 'IFRAME' || el.tagName === 'FRAME') && frameDepth < 5) {
+                        var frameDoc = null;
+                        try { frameDoc = el.contentDocument; } catch (e) { frameDoc = null; }
+                        if (frameDoc) {
+                            awWalkScopes(frameDoc, frameDepth + 1, handler);
+                        }
+                    }
+                });
+            }
+"""
+
+_MARKER_SCRIPT_TEMPLATE = """
+(() => {
+    function generateUniqueId() {
+        return 'aw-' + Math.random().toString(36).substr(2, 9);
+    }
+
+    const selectors = __INTERACTIVE_SELECTORS__;
+    const markers = [];
+__SCOPE_WALKER__
+    awWalkScopes(document, 0, function (scope, frameDepth) {
+        selectors.forEach(function (selector) {
+            scope.querySelectorAll(selector).forEach(function (element) {
+                // Skip already marked elements
+                if (element.hasAttribute('data-autowing-id')) {
+                    return;
+                }
+
+                const uniqueId = generateUniqueId();
+                element.setAttribute('data-autowing-id', uniqueId);
+
+                markers.push({
+                    id: uniqueId,
+                    tagName: element.tagName.toLowerCase(),
+                    type: element.getAttribute('type') || null,
+                    placeholder: element.getAttribute('placeholder') || null,
+                    value: element.value || null,
+                    textContent: element.textContent ? element.textContent.trim().substring(0, 100) : '',
+                    ariaLabel: element.getAttribute('aria-label') || null,
+                    role: element.getAttribute('role') || null,
+                    inFrame: frameDepth > 0,
+                    boundingBox: element.getBoundingClientRect()
+                });
+            });
+        });
+    });
+
+    return markers;
+})();
+"""
+
+_ELEMENTS_SCRIPT_TEMPLATE = """
+(() => {
+    const selectors = __ELEMENT_SELECTORS__;
+    const elements = [];
+__SCOPE_WALKER__
+    awWalkScopes(document, 0, function (scope, frameDepth) {
+        selectors.forEach(function (selector) {
+            scope.querySelectorAll(selector).forEach(function (el) {
+                if (el.offsetWidth > 0 && el.offsetHeight > 0) {
+                    elements.push({
+                        tag: el.tagName.toLowerCase(),
+                        type: el.getAttribute('type') || null,
+                        placeholder: el.getAttribute('placeholder') || null,
+                        value: el.value || null,
+                        text: el.textContent ? el.textContent.trim() : '',
+                        aria: el.getAttribute('aria-label') || null,
+                        id: el.id || '',
+                        name: el.getAttribute('name') || null,
+                        // SVG elements expose a non-string className; keep it serializable
+                        class: typeof el.className === 'string' ? el.className : '',
+                        draggable: el.getAttribute('draggable') || null,
+                        autowingId: el.getAttribute('data-autowing-id') || null,
+                        inFrame: frameDepth > 0,
+                        // Note: for elements inside iframes the box is relative
+                        // to that frame's viewport
+                        boundingBox: {
+                            x: el.getBoundingClientRect().x,
+                            y: el.getBoundingClientRect().y,
+                            width: el.getBoundingClientRect().width,
+                            height: el.getBoundingClientRect().height
+                        }
+                    });
+                }
+            });
+        });
+    });
+
+    return elements;
+})();
+"""
+
+_CLEAR_MARKERS_SCRIPT_TEMPLATE = """
+(() => {
+__SCOPE_WALKER__
+    awWalkScopes(document, 0, function (scope) {
+        scope.querySelectorAll('[data-autowing-id]').forEach(function (el) {
+            el.removeAttribute('data-autowing-id');
+        });
+    });
+})();
+"""
+
+
+def _fill_script_template(template: str) -> str:
+    """Fill shared placeholders and return the script as a single IIFE expression."""
+    return (template
+            .replace("__INTERACTIVE_SELECTORS__", _INTERACTIVE_SELECTORS_JS)
+            .replace("__ELEMENT_SELECTORS__", _ELEMENT_SELECTORS_JS)
+            .replace("__SCOPE_WALKER__", _SCOPE_WALKER_JS)
+            .strip())
+
+
+def build_marker_injection_script() -> str:
+    """
+    Build the marker injection script (IIFE expression returning the marker
+    list). Covers the top document, same-origin iframes and open shadow roots.
+    """
+    return _fill_script_template(_MARKER_SCRIPT_TEMPLATE)
+
+
+def build_elements_collection_script() -> str:
+    """
+    Build the element collection script (IIFE expression returning visible
+    elements). Covers the top document, same-origin iframes and open shadow
+    roots; nested-frame elements carry ``inFrame: true``.
+    """
+    return _fill_script_template(_ELEMENTS_SCRIPT_TEMPLATE)
+
+
+def build_clear_markers_script() -> str:
+    """Build the script that removes all data-autowing-id markers, including
+    those inside same-origin iframes and open shadow roots."""
+    return _fill_script_template(_CLEAR_MARKERS_SCRIPT_TEMPLATE)
+
+
 class AiFixtureWeb(AiFixtureBase, ABC):
     """
     Abstract base class for web automation fixtures.
