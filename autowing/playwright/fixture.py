@@ -337,6 +337,7 @@ No other text or explanation.
 
         response = self._llm_complete(query_prompt)
 
+        cleaned_response = ""
         try:
             cleaned_response = self._clean_response(response)
             try:
@@ -536,6 +537,7 @@ Expected Result: Describe the expected result.
 Finally, the output result is required to be in {language}
 """
 
+        cleaned_response = ""
         try:
             response = self._llm_complete(case_prompt)
             cleaned_response = self._clean_response(response)
