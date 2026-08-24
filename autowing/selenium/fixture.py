@@ -36,7 +36,9 @@ class SeleniumAiFixture(AiFixtureWeb):
         """
         super().__init__()
         self.driver = driver
-        self.wait = WebDriverWait(driver, 10)
+        # Element waits are capped by AUTOWING_ACTION_TIMEOUT (default 30s)
+        # so a stuck element fails fast into the retry/re-plan loop.
+        self.wait = WebDriverWait(driver, self._action_timeout)
         self.llm_client = LLMFactory.create()
 
     def get_cache_statistics(self) -> dict:

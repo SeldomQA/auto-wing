@@ -1,5 +1,8 @@
+import base64
 import json
 import os
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from loguru import logger
@@ -27,6 +30,18 @@ class AiFixtureBase:
             self._max_action_retries = max(0, int(os.getenv("AUTOWING_MAX_RETRIES", "2")))
         except ValueError:
             self._max_action_retries = 2
+        # Debug aids (plan item F6): AUTOWING_DEBUG=true prints full prompts
+        # and raw LLM responses; AUTOWING_ACTION_TIMEOUT caps every element
+        # operation in seconds; failed actions are screenshotted to disk and
+        # appended to an execution trace next to the cache dir.
+        self._debug_enabled = os.getenv("AUTOWING_DEBUG", "false").lower() in ("1", "true", "yes")
+        try:
+            self._action_timeout = max(1.0, float(os.getenv("AUTOWING_ACTION_TIMEOUT", "30")))
+        except ValueError:
+            self._action_timeout = 30.0
+        default_screenshot_dir = os.path.join(os.path.dirname(cache_dir), "screenshots")
+        self._screenshot_dir = os.getenv("AUTOWING_SCREENSHOT_DIR", default_screenshot_dir)
+        self._trace_path = os.path.join(os.path.dirname(cache_dir), "trace.jsonl")
 
     def enable_vision(self, enabled: bool = True):
         """
@@ -95,11 +110,78 @@ class AiFixtureBase:
                 screenshot_b64 = self._capture_screenshot_base64()
                 if screenshot_b64:
                     messages = self._build_vision_messages(prompt, screenshot_b64)
-                    return self.llm_client.complete_with_vision({"messages": messages})
+                    if getattr(self, '_debug_enabled', False):
+                        logger.info(f"🐞 [AUTOWING_DEBUG] Full prompt (vision):\n{prompt}")
+                    response = self.llm_client.complete_with_vision({"messages": messages})
+                    if getattr(self, '_debug_enabled', False):
+                        logger.info(f"🐞 [AUTOWING_DEBUG] Raw LLM response:\n{response}")
+                    return response
                 logger.warning("⚠️ Vision enabled but screenshot capture unavailable, using text mode")
             except Exception as e:
                 logger.warning(f"⚠️ Vision completion failed, falling back to text mode: {e}")
-        return self.llm_client.complete(prompt)
+        if getattr(self, '_debug_enabled', False):
+            logger.info(f"🐞 [AUTOWING_DEBUG] Full prompt:\n{prompt}")
+        response = self.llm_client.complete(prompt)
+        if getattr(self, '_debug_enabled', False):
+            logger.info(f"🐞 [AUTOWING_DEBUG] Raw LLM response:\n{response}")
+        return response
+
+    def _save_failure_screenshot(self, prompt: str = "") -> Optional[str]:
+        """
+        Save a screenshot of the current page/screen after a failed action.
+
+        The image is written to self._screenshot_dir with a timestamped name
+        and the path is logged. Any capture or write failure is swallowed so
+        that debugging never masks the original action error.
+
+        Args:
+            prompt (str): The action prompt, used to enrich the file name
+
+        Returns:
+            Optional[str]: The saved file path, or None when capture failed
+        """
+        try:
+            data = self._capture_screenshot_base64()
+            if not data:
+                return None
+            screenshot_dir = getattr(self, '_screenshot_dir', None)
+            if not screenshot_dir:
+                return None
+            os.makedirs(screenshot_dir, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            hint = "".join(ch for ch in prompt if ch.isalnum())[:20]
+            name = f"ai_action_failure_{stamp}_{hint}.png" if hint else f"ai_action_failure_{stamp}.png"
+            path = os.path.join(screenshot_dir, name)
+            with open(path, "wb") as fh:
+                fh.write(base64.b64decode(data))
+            logger.info(f"📸 Failure screenshot saved: {path}")
+            return path
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to save failure screenshot: {e}")
+            return None
+
+    def _record_trace(self, event: str, prompt: str, **fields) -> None:
+        """
+        Append one execution-trace line to the trace file next to the cache
+        dir (trace.jsonl). Silently skipped when the file cannot be written.
+
+        Args:
+            event (str): Trace event name (e.g. 'ai_action_success')
+            prompt (str): The user prompt of the operation
+            **fields: Extra JSON-serializable fields (attempt, error, ...)
+        """
+        try:
+            trace_path = getattr(self, '_trace_path', None)
+            if not trace_path:
+                return
+            Path(trace_path).parent.mkdir(parents=True, exist_ok=True)
+            record = {"time": datetime.now().isoformat(), "event": event,
+                      "prompt": prompt}
+            record.update(fields)
+            with open(trace_path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+        except Exception:
+            pass  # Tracing must never break the action flow
 
     def _remove_empty_keys(self, dict_list: list) -> list:
         """
@@ -475,9 +557,14 @@ IMPORTANT: Return ONLY the word 'true' or 'false' (lowercase). No other text, no
                 if attempt > 0:
                     # The replanned instruction worked: refresh the cache
                     self.cache_manager.set_intelligent(prompt, context, instruction)
+                self._record_trace("ai_action_success", prompt, attempt=attempt + 1,
+                                   instruction=instruction, from_cache=from_cache)
                 return
             except Exception as e:
                 last_error = e
+                screenshot_path = self._save_failure_screenshot(prompt)
+                self._record_trace("ai_action_attempt_failed", prompt, attempt=attempt + 1,
+                                   instruction=instruction, error=e, screenshot=screenshot_path)
                 if attempt >= self._max_action_retries:
                     break
                 # Evict the failing instruction before re-planning
@@ -487,6 +574,7 @@ IMPORTANT: Return ONLY the word 'true' or 'false' (lowercase). No other text, no
                                f"Re-planning with error context...")
                 instruction = compute_action(str(e))
 
+        self._record_trace("ai_action_failed", prompt, attempts=total_attempts, error=last_error)
         logger.error(f"❌ ai_action failed after {total_attempts} attempts: {last_error}")
         raise last_error
 

@@ -46,7 +46,8 @@ class AppiumAiFixture(AiFixtureBase):
         self.driver = driver
         self.platform = platform
         self.llm_client = LLMFactory.create()
-        self.wait = WebDriverWait(self.driver, 10)  # Default timeout of 10 seconds
+        # Screen waits are capped by AUTOWING_ACTION_TIMEOUT (default 30s)
+        self.wait = WebDriverWait(self.driver, self._action_timeout)
 
     def _get_page_context(self) -> Dict[str, Any]:
         """
@@ -163,14 +164,20 @@ Re-plan carefully to avoid the same problem.
         for attempt in range(total_attempts):
             try:
                 self._execute_action_instruction(instruction)
+                self._record_trace("ai_action_success", prompt, attempt=attempt + 1,
+                                   instruction=instruction)
                 return
             except Exception as e:
                 last_error = e
+                screenshot_path = self._save_failure_screenshot(prompt)
+                self._record_trace("ai_action_attempt_failed", prompt, attempt=attempt + 1,
+                                   instruction=instruction, error=e, screenshot=screenshot_path)
                 if attempt >= self._max_action_retries:
                     break
                 logger.warning(f"⚠️ Action attempt {attempt + 1}/{total_attempts} failed: {e}. "
                                f"Re-planning with error context...")
                 instruction = compute_action(str(e))
+        self._record_trace("ai_action_failed", prompt, attempts=total_attempts, error=last_error)
         logger.error(f"❌ ai_action failed after {total_attempts} attempts: {last_error}")
         raise last_error
 

@@ -208,6 +208,10 @@ Re-plan carefully to avoid the same problem.
         Supported actions: click, fill, press, select, hover, check, uncheck,
         scroll (into view), upload (set_input_files).
 
+        Every element operation is capped by AUTOWING_ACTION_TIMEOUT
+        (default 30s) so a stuck element fails fast into the retry loop
+        instead of hanging on playwright's own defaults.
+
         Raises:
             ValueError: If the instruction is invalid or the cached selector is stale
         """
@@ -216,6 +220,8 @@ Re-plan carefully to avoid the same problem.
 
         if not selector or not action:
             raise ValueError("Invalid instruction format")
+
+        timeout_ms = int(getattr(self, '_action_timeout', 30) * 1000)
 
         # Perform the action
         selector = selector_to_locator(selector)
@@ -228,35 +234,35 @@ Re-plan carefully to avoid the same problem.
             raise ValueError(f"Cached selector matched no elements: {selector}")
 
         if action == 'click':
-            element.click()
+            element.click(timeout=timeout_ms)
         elif action == 'fill':
-            element.fill(instruction.get('value', ''))
+            element.fill(instruction.get('value', ''), timeout=timeout_ms)
             if instruction.get('key'):
-                element.press(instruction.get('key'))
+                element.press(instruction.get('key'), timeout=timeout_ms)
         elif action == 'press':
-            element.press(instruction.get('key', 'Enter'))
+            element.press(instruction.get('key', 'Enter'), timeout=timeout_ms)
         elif action == 'select':
             option_value = instruction.get('value')
             if option_value is None:
                 raise ValueError("select action requires 'value' (option value or label)")
             try:
-                element.select_option(value=str(option_value))
+                element.select_option(value=str(option_value), timeout=timeout_ms)
             except Exception:
                 # Retry by visible label when no option carries that value
-                element.select_option(label=str(option_value))
+                element.select_option(label=str(option_value), timeout=timeout_ms)
         elif action == 'hover':
-            element.hover()
+            element.hover(timeout=timeout_ms)
         elif action == 'check':
-            element.check()
+            element.check(timeout=timeout_ms)
         elif action == 'uncheck':
-            element.uncheck()
+            element.uncheck(timeout=timeout_ms)
         elif action == 'scroll':
-            element.scroll_into_view_if_needed()
+            element.scroll_into_view_if_needed(timeout=timeout_ms)
         elif action == 'upload':
             file_path = instruction.get('value')
             if not file_path:
                 raise ValueError("upload action requires 'value' (file path)")
-            element.set_input_files(file_path)
+            element.set_input_files(file_path, timeout=timeout_ms)
         else:
             raise ValueError(f"Unsupported action: {action}")
 
