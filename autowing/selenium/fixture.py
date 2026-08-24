@@ -3,11 +3,12 @@ from typing import Any, Dict, Optional
 
 from loguru import logger
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import Select, WebDriverWait
 
 from autowing.core.ai_fixture_web import (
     AiFixtureWeb,
@@ -187,8 +188,8 @@ You are a web automation assistant. Generate EXACT JSON with these SPECIFIC fiel
 REQUIRED JSON FORMAT:
 {{
     "selector": "XPATH selector (REQUIRED)",
-    "action": "fill|click|press (REQUIRED)", 
-    "value": "text for fill action (optional)",
+    "action": "fill|click|press|select|hover|check|uncheck|scroll|upload (REQUIRED)", 
+    "value": "text for fill / option value or label for select / file path for upload (optional)",
     "key": "key for press action (optional)"
 }}
 
@@ -226,6 +227,9 @@ Re-plan carefully to avoid the same problem.
             instruction (dict): Parsed LLM instruction (selector/action/value/key)
             from_cache (bool): Whether the instruction came from the cache
 
+        Supported actions: click, fill, press, select, hover, check, uncheck,
+        scroll (into view), upload (send file path to input[type=file]).
+
         Raises:
             ValueError: If the instruction is invalid
             TimeoutException: If the element cannot be found or interacted with
@@ -252,6 +256,30 @@ Re-plan carefully to avoid the same problem.
         elif action == 'press':
             key_attr = getattr(Keys, instruction.get('key', 'ENTER').upper())
             element.send_keys(key_attr)
+        elif action == 'select':
+            option_value = instruction.get('value')
+            if option_value is None:
+                raise ValueError("select action requires 'value' (option value or label)")
+            select = Select(element)
+            try:
+                select.select_by_value(str(option_value))
+            except Exception:
+                # Retry by visible text when no option carries that value
+                select.select_by_visible_text(str(option_value))
+        elif action == 'hover':
+            ActionChains(self.driver).move_to_element(element).perform()
+        elif action in ('check', 'uncheck'):
+            wanted = (action == 'check')
+            if element.is_selected() != wanted:
+                element.click()
+        elif action == 'scroll':
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", element)
+        elif action == 'upload':
+            file_path = instruction.get('value')
+            if not file_path:
+                raise ValueError("upload action requires 'value' (file path)")
+            element.send_keys(file_path)
         else:
             raise ValueError(f"Unsupported action: {action}")
 

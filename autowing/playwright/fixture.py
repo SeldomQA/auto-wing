@@ -158,8 +158,8 @@ You are a web automation assistant. Generate EXACT JSON with these SPECIFIC fiel
 REQUIRED JSON FORMAT:
 {{
     "selector": "CSS selector or XPath (REQUIRED)",
-    "action": "fill|click|press (REQUIRED)", 
-    "value": "text for fill action (optional)",
+    "action": "fill|click|press|select|hover|check|uncheck|scroll|upload (REQUIRED)", 
+    "value": "text for fill / option value or label for select / file path for upload (optional)",
     "key": "key for press action (optional)"
 }}
 
@@ -205,6 +205,9 @@ Re-plan carefully to avoid the same problem.
             from_cache (bool): Whether the instruction came from the cache
             frame: Optional Playwright Frame to scope locator resolution to
 
+        Supported actions: click, fill, press, select, hover, check, uncheck,
+        scroll (into view), upload (set_input_files).
+
         Raises:
             ValueError: If the instruction is invalid or the cached selector is stale
         """
@@ -232,6 +235,28 @@ Re-plan carefully to avoid the same problem.
                 element.press(instruction.get('key'))
         elif action == 'press':
             element.press(instruction.get('key', 'Enter'))
+        elif action == 'select':
+            option_value = instruction.get('value')
+            if option_value is None:
+                raise ValueError("select action requires 'value' (option value or label)")
+            try:
+                element.select_option(value=str(option_value))
+            except Exception:
+                # Retry by visible label when no option carries that value
+                element.select_option(label=str(option_value))
+        elif action == 'hover':
+            element.hover()
+        elif action == 'check':
+            element.check()
+        elif action == 'uncheck':
+            element.uncheck()
+        elif action == 'scroll':
+            element.scroll_into_view_if_needed()
+        elif action == 'upload':
+            file_path = instruction.get('value')
+            if not file_path:
+                raise ValueError("upload action requires 'value' (file path)")
+            element.set_input_files(file_path)
         else:
             raise ValueError(f"Unsupported action: {action}")
 
