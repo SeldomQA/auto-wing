@@ -273,6 +273,9 @@ class AiFixtureBase:
             except (ValueError, TypeError):
                 raise ValueError(f"Cannot convert results to numbers: {result}")
 
+        # Any other hint (e.g. 'object[]'): return the parsed result unchanged
+        return result
+
     def _parse_format_hint(self, prompt: str) -> tuple:
         """
         Extract a leading format hint (e.g. 'string[]') from the prompt.
