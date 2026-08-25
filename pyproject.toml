@@ -37,3 +37,43 @@ homepage = "https://github.com/SeldomQA/auto-wing"
 testpaths = ["tests"]
 addopts = "-v"
 python_files = ["test_*.py"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+# Lint the package and the test suite; examples/ stays free-form.
+src = ["autowing", "tests"]
+
+[tool.ruff.lint]
+# Start conservative: obvious defects only (pyflakes, fatal pycodestyle,
+# invalid escapes, bugbear) - no blanket style enforcement yet (plan item T3).
+select = ["E9", "F", "W6", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test fixtures build objects via __new__ and rely on dynamic attributes
+"tests/*" = ["B011"]
+
+[tool.mypy]
+python_version = "3.10"
+# Progressive adoption: drivers have no usable stubs, so ignore missing
+# imports globally; strict mode is enabled per-module below (plan: start
+# with autowing.core).
+ignore_missing_imports = true
+warn_unused_ignores = false
+check_untyped_defs = false
+
+# Core logic first: tighten gradually per module
+[[tool.mypy.overrides]]
+module = "autowing.utils.*"
+disallow_untyped_defs = true
+
+# LLM SDK stubs are overly strict (model-name literals, message param
+# unions); cache internals are migrated gradually. Silence for now.
+[[tool.mypy.overrides]]
+module = ["autowing.core.llm.client.*", "autowing.core.cache.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["autowing.playwright.*", "autowing.selenium.*", "autowing.appium.*"]
+ignore_errors = true
+
