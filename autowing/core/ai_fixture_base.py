@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from loguru import logger
 
@@ -15,6 +15,15 @@ class AiFixtureBase:
     Base class for AI Fixtures. Contains common response processing logic
     shared between Playwright, Selenium and Appium fixtures.
     """
+
+    # Template-method contract: concrete driver subclasses provide the LLM
+    # client and the page-context collector. Declared here so type checkers
+    # understand the interface.
+    llm_client: Any
+
+    def _get_page_context(self) -> Dict[str, Any]:
+        """Extract page/screen context; implemented by driver subclasses."""
+        raise NotImplementedError
 
     def __init__(self):
         """Initialize the base fixture with intelligent cache support."""
@@ -271,7 +280,7 @@ class AiFixtureBase:
             try:
                 return [float(item) for item in result]
             except (ValueError, TypeError):
-                raise ValueError(f"Cannot convert results to numbers: {result}")
+                raise ValueError(f"Cannot convert results to numbers: {result}") from None
 
         # Any other hint (e.g. 'object[]'): return the parsed result unchanged
         return result
@@ -389,7 +398,12 @@ No other text or explanation.
         if results:
             # Remove duplicates while preserving order
             seen = set()
-            return [x for x in results if not (x in seen or seen.add(x))]
+            deduplicated = []
+            for item in results:
+                if item not in seen:
+                    seen.add(item)
+                    deduplicated.append(item)
+            return deduplicated
         return None
 
     @staticmethod
@@ -449,10 +463,10 @@ No other text or explanation.
                 if extracted:
                     logger.debug(f"📄 Query: {extracted}")
                     return extracted
-                raise ValueError(f"Failed to parse response as JSON: {cleaned_response[:100]}...")
+                raise ValueError(f"Failed to parse response as JSON: {cleaned_response[:100]}...") from None
 
         except Exception as e:
-            raise ValueError(f"Query failed. Error: {str(e)}\nResponse: {cleaned_response[:100]}...")
+            raise ValueError(f"Query failed. Error: {str(e)}\nResponse: {cleaned_response[:100]}...") from e
 
     def ai_assert(self, prompt: str) -> bool:
         """
@@ -579,6 +593,8 @@ IMPORTANT: Return ONLY the word 'true' or 'false' (lowercase). No other text, no
 
         self._record_trace("ai_action_failed", prompt, attempts=total_attempts, error=last_error)
         logger.error(f"❌ ai_action failed after {total_attempts} attempts: {last_error}")
+        if last_error is None:  # unreachable: the loop always records an error
+            last_error = RuntimeError("ai_action failed without capturing an error")
         raise last_error
 
     def _get_cached_or_compute(self, prompt: str, context: dict, compute_func) -> Any:

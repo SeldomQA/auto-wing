@@ -377,7 +377,7 @@ Finally, the output result is required to be in {language}
             logger.debug(f"""📄 Function Cases:\n {cleaned_response}""")
             return cleaned_response
         except Exception as e:
-            raise ValueError(f"Failed to generate test cases. Error: {str(e)}\nResponse: {cleaned_response[:100]}...")
+            raise ValueError(f"Failed to generate test cases. Error: {str(e)}\nResponse: {cleaned_response[:100]}...") from e
 
 
 def create_fixture():

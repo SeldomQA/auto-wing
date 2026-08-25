@@ -1,6 +1,5 @@
-import json
 from collections import defaultdict, Counter
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any
 from datetime import datetime
 import re
 

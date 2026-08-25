@@ -139,8 +139,7 @@ class ImprovedTFIDFVectorizer:
             
             # Calculate TF (term frequency)
             tf_counter = Counter(text_ngrams)
-            total_terms = len(text_ngrams)
-            
+
             # Calculate TF-IDF
             for ngram, count in tf_counter.items():
                 if ngram in self.vocabulary_:
@@ -250,8 +249,8 @@ class IntelligentCacheManager:
         if not vec1 or not vec2 or len(vec1) != len(vec2):
             return 0.0
         
-        # Calculate dot product
-        dot_product = sum(a * b for a, b in zip(vec1, vec2))
+        # Calculate dot product (both vectors share the vocabulary dimension)
+        dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=True))
         
         # Calculate vector magnitudes
         magnitude1 = math.sqrt(sum(a * a for a in vec1))

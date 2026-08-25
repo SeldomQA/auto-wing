@@ -112,7 +112,7 @@ class GeminiClient(BaseLLMClient):
                 raise Exception("Empty response from Gemini API")
                 
         except Exception as e:
-            raise Exception(f"Gemini API error: {str(e)}")
+            raise Exception(f"Gemini API error: {str(e)}") from e
         finally:
             # Close the client to release resources
             self.client.close()
@@ -184,7 +184,7 @@ class GeminiClient(BaseLLMClient):
                 raise Exception("Empty response from Gemini Vision API")
                 
         except Exception as e:
-            raise Exception(f"Gemini Vision API error: {str(e)}")
+            raise Exception(f"Gemini Vision API error: {str(e)}") from e
         finally:
             # Close the client to release resources
             self.client.close()

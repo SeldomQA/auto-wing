@@ -59,14 +59,14 @@ class TestFitTransform:
     def test_identical_texts_similarity_one(self, vectorizer):
         vectors = vectorizer.fit_transform(["click button", "click button"])
         # Identical non-zero vectors must have cosine similarity 1.0
-        dot = sum(a * b for a, b in zip(vectors[0], vectors[1]))
+        dot = sum(a * b for a, b in zip(vectors[0], vectors[1], strict=True))
         norm = (sum(a * a for a in vectors[0]) ** 0.5) * (sum(b * b for b in vectors[1]) ** 0.5)
         assert dot / norm == pytest.approx(1.0)
 
     def test_different_texts_lower_similarity(self, vectorizer):
         texts = ["click the login button", "fill the username field"]
         vectors = vectorizer.fit_transform(texts)
-        dot = sum(a * b for a, b in zip(vectors[0], vectors[1]))
+        dot = sum(a * b for a, b in zip(vectors[0], vectors[1], strict=True))
         norm = (sum(a * a for a in vectors[0]) ** 0.5) * (sum(b * b for b in vectors[1]) ** 0.5)
         similarity = dot / norm if norm else 0.0
         assert similarity < 1.0

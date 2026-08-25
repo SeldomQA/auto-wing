@@ -114,7 +114,7 @@ class DeepSeekClient(BaseLLMClient):
 
             return response.choices[0].message.content
         except Exception as e:
-            raise Exception(f"DeepSeek API error: {str(e)}")
+            raise Exception(f"DeepSeek API error: {str(e)}") from e
 
     def complete_with_vision(self, prompt: Dict[str, Any]) -> str:
         """
@@ -150,4 +150,4 @@ class DeepSeekClient(BaseLLMClient):
 
             return response.choices[0].message.content
         except Exception as e:
-            raise Exception(f"DeepSeek API error: {str(e)}")
+            raise Exception(f"DeepSeek API error: {str(e)}") from e

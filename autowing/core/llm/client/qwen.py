@@ -112,7 +112,7 @@ class QwenClient(BaseLLMClient):
 
             return response.choices[0].message.content
         except Exception as e:
-            raise Exception(f"Qwen API error: {str(e)}")
+            raise Exception(f"Qwen API error: {str(e)}") from e
 
     def complete_with_vision(self, prompt: Dict[str, Any]) -> str:
         """
@@ -148,4 +148,4 @@ class QwenClient(BaseLLMClient):
 
             return response.choices[0].message.content
         except Exception as e:
-            raise Exception(f"Qwen API error: {str(e)}")
+            raise Exception(f"Qwen API error: {str(e)}") from e
