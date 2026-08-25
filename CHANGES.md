@@ -1,3 +1,19 @@
+### 0.8.0
+
+* 功能：增加视觉能力，`AUTOWING_VISION` 环境变量 / `enable_vision()` 开关，截图随请求传给视觉模型，不支持时自动降级为纯文本模式。
+* 功能：`ai_action()` 动作集扩展，新增 `select`（下拉选择）、`hover`、`check`/`uncheck`、`scroll`、`upload`。
+* 功能：`ai_action()` 失败重试与重规划，失败后淘汰失效缓存并携带错误信息重新规划（`AUTOWING_MAX_RETRIES` 可配置，默认 2 次），非法 JSON 响应自动反馈重试。
+* 功能：支持 iframe 与 Shadow DOM：标记注入/元素采集覆盖同源 iframe 与 open Shadow DOM；Playwright `ai_action(prompt, frame=...)` 支持指定 frame。
+* 功能：调试辅助能力：`AUTOWING_DEBUG` 打印完整 prompt/响应；动作失败自动截图；执行轨迹记录 `.auto-wing/trace.jsonl`；`AUTOWING_ACTION_TIMEOUT` 统一操作超时（默认 30 秒）。
+* 功能：三驱动构造器支持注入自定义 LLM 客户端（`llm_client=` 参数），便于离线 Mock 测试。
+* 优化：`IntelligentCacheManager` 进程级共享（按 `AUTOWING_CACHE_DIR` 复用），跨用例共享缓存提升命中率。
+* 优化：`ai_query()`/`ai_assert()` 实现收敛至基类，三端行为对齐。
+* 修复：缓存指令定位失败未淘汰导致的反复命中失效缓存。
+* 修复：Gemini 客户端图片传入方式（改为 `inline_data`）。
+* 修复：`ai_assert()` 三端元素上下文不一致；异常分支变量未定义掩盖原始错误。
+* 修复：`[text() = 'x']` 带空白谓词在 Playwright 端转换失效；`object[]` 格式提示返回 `None`。
+* 工程：建立 `tests/` 单元/集成测试套件（135 个用例，浏览器/模型依赖优雅跳过）；引入 `ruff`/`mypy` 质量门禁；清理仓库历史遗留调试脚本。
+
 ### 0.7.0
 
 * Web端操作增加页面元素注入定位属性，提升定位的稳定性。
