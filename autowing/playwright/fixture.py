@@ -21,16 +21,19 @@ class PlaywrightAiFixture(AiFixtureWeb):
     Provides AI-driven interaction with web pages using various LLM providers.
     """
 
-    def __init__(self, page: Page):
+    def __init__(self, page: Page, llm_client=None):
         """
         Initialize the AI-powered Playwright fixture.
 
         Args:
             page (Page): The Playwright page object to automate
+            llm_client: Optional BaseLLMClient implementation to inject
+                        instead of LLMFactory.create() - primarily for
+                        offline testing with a scripted fake (plan item T4)
         """
         super().__init__()
         self.page = page
-        self.llm_client = LLMFactory.create()
+        self.llm_client = llm_client if llm_client is not None else LLMFactory.create()
 
     def get_cache_statistics(self) -> dict:
         """

@@ -27,19 +27,22 @@ class SeleniumAiFixture(AiFixtureWeb):
     Maintains API compatibility with PlaywrightAiFixture.
     """
 
-    def __init__(self, driver: WebDriver):
+    def __init__(self, driver: WebDriver, llm_client=None):
         """
         Initialize the AI-powered Selenium fixture.
 
         Args:
             driver (WebDriver): The Selenium WebDriver instance to automate
+            llm_client: Optional BaseLLMClient implementation to inject
+                        instead of LLMFactory.create() - primarily for
+                        offline testing with a scripted fake (plan item T4)
         """
         super().__init__()
         self.driver = driver
         # Element waits are capped by AUTOWING_ACTION_TIMEOUT (default 30s)
         # so a stuck element fails fast into the retry/re-plan loop.
         self.wait = WebDriverWait(driver, self._action_timeout)
-        self.llm_client = LLMFactory.create()
+        self.llm_client = llm_client if llm_client is not None else LLMFactory.create()
 
     def get_cache_statistics(self) -> dict:
         """

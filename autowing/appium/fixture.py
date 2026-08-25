@@ -33,18 +33,21 @@ class AppiumAiFixture(AiFixtureBase):
     Provides AI-driven interaction with mobile apps using various LLM providers.
     """
 
-    def __init__(self, driver: WebDriver, platform: str = "Android"):
+    def __init__(self, driver: WebDriver, platform: str = "Android", llm_client=None):
         """
         Initialize the AI-powered Appium fixture.
 
         Args:
             driver (WebDriver): The Appium WebDriver instance to automate
             platform: Mobile operating system platform
+            llm_client: Optional BaseLLMClient implementation to inject
+                        instead of LLMFactory.create() - primarily for
+                        offline testing with a scripted fake (plan item T4)
         """
         super().__init__()
         self.driver = driver
         self.platform = platform
-        self.llm_client = LLMFactory.create()
+        self.llm_client = llm_client if llm_client is not None else LLMFactory.create()
         # Screen waits are capped by AUTOWING_ACTION_TIMEOUT (default 30s)
         self.wait = WebDriverWait(self.driver, self._action_timeout)
 
