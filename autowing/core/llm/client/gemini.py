@@ -29,7 +29,11 @@ class GeminiClient(BaseLLMClient):
         if not self.api_key:
             raise ValueError("Google Gemini API key is required")
 
-        self.model_name = os.getenv("MIDSCENE_MODEL_NAME", "gemini-2.0-flash")
+        # GEMINI_MODEL_NAME is the canonical switch; MIDSCENE_MODEL_NAME kept
+        # for backward compatibility with older setups.
+        self.model_name = (os.getenv("GEMINI_MODEL_NAME")
+                           or os.getenv("MIDSCENE_MODEL_NAME")
+                           or "gemini-2.0-flash")
         
         # Create client for Gemini Developer API
         self.client = genai.Client(api_key=self.api_key)

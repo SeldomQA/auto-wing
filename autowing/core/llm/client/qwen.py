@@ -26,8 +26,16 @@ class QwenClient(BaseLLMClient):
         if not self.api_key:
             raise ValueError("Please set the env variable `DASHSCOPE_API_KEY`")
 
-        self.base_url = os.getenv("OPENAI_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-        self.model_name = os.getenv("MIDSCENE_MODEL_NAME", "qwen3-max")
+        # QWEN_BASE_URL is the canonical switch; OPENAI_BASE_URL kept for
+        # backward compatibility (it was the original variable name here).
+        self.base_url = (os.getenv("QWEN_BASE_URL")
+                         or os.getenv("OPENAI_BASE_URL")
+                         or "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        # QWEN_MODEL_NAME is the canonical switch; MIDSCENE_MODEL_NAME kept
+        # for backward compatibility with older setups.
+        self.model_name = (os.getenv("QWEN_MODEL_NAME")
+                           or os.getenv("MIDSCENE_MODEL_NAME")
+                           or "qwen3-max")
 
         self.client = OpenAI(
             api_key=self.api_key,

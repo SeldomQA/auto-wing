@@ -29,7 +29,11 @@ class OpenAIClient(BaseLLMClient):
             raise ValueError("OpenAI API key is required")
 
         self.base_url = base_url or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        self.model_name = os.getenv("MIDSCENE_MODEL_NAME", "gpt-4o-2024-08-06")
+        # OPENAI_MODEL_NAME is the canonical switch; MIDSCENE_MODEL_NAME kept
+        # for backward compatibility with older setups.
+        self.model_name = (os.getenv("OPENAI_MODEL_NAME")
+                           or os.getenv("MIDSCENE_MODEL_NAME")
+                           or "gpt-4o-2024-08-06")
 
         client_kwargs = {"api_key": self.api_key}
         if self.base_url:
