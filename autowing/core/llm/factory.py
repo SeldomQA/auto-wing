@@ -9,6 +9,7 @@ from autowing.core.llm.client.doubao import DoubaoClient
 from autowing.core.llm.client.openai import OpenAIClient
 from autowing.core.llm.client.qwen import QwenClient
 from autowing.core.llm.client.gemini import GeminiClient
+from autowing.core.llm.client.kimi import KimiClient
 
 
 class LLMFactory:
@@ -22,7 +23,8 @@ class LLMFactory:
         'qwen': QwenClient,
         'deepseek': DeepSeekClient,
         'doubao': DoubaoClient,
-        'gemini': GeminiClient
+        'gemini': GeminiClient,
+        'kimi': KimiClient
     }
 
     @classmethod
