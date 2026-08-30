@@ -8,15 +8,27 @@ auto-wing是一个利用LLM辅助自动化测试的工具, 为你的自动化测
 
 ### Features
 
-⭐ 支持主流 `playwright`、`selenium`、`appium`库，支持`Web UI`和`App UI`的`AI`操作。
+⭐ 多端支持：主流 `playwright`、`selenium`、`appium` 库，覆盖 `Web UI` 与 `App UI` 的 `AI` 操作。
 
-⭐ 支持多模型：`openai`、`deepseek`、`qwen`、`doubao` 和 `gemini`。
+⭐ 多模型：`openai`、`deepseek`、`qwen`、`doubao`、`gemini` 和 `kimi`，模型版本可通过环境变量自定义。
 
-⭐ 支持多种操作：`ai_action`、`ai_query`、`ai_assert`。
+⭐ 多种操作：`ai_action`（页面操作）、`ai_query`（信息查询）、`ai_assert`（智能断言）、`ai_function_cases`（功能用例生成）。
 
-⭐ 智能缓存管理： 减少LLM调用，增加执行速度。
+⭐ 丰富的动作集：`click`、`fill`、`press`、`select`（下拉框）、`hover`、`check`/`uncheck`、`scroll`、`upload`。
 
-⭐ 无痛的集成到现有自动化项目（`pytest`、`unittest`）中。
+⭐ 视觉模式：截图随请求传给视觉模型辅助定位（`AUTOWING_VISION=true`），不支持时自动降级为纯文本。
+
+⭐ 失败重试与重规划：动作失败/非法响应时自动携带错误信息重新规划，失效缓存自动淘汰。
+
+⭐ 跨 frame 覆盖：标记注入与元素采集覆盖同源 `iframe` 与 open `Shadow DOM`。
+
+⭐ 智能缓存管理：进程级共享缓存，减少 LLM 调用，提升执行速度。
+
+⭐ 调试辅助：操作超时、失败自动截图、执行轨迹（`trace.jsonl`）、`AUTOWING_DEBUG` 全量日志。
+
+⭐ 可测试性：支持注入自定义 LLM 客户端，离线 Mock 测试无需真实模型。
+
+⭐ 无痛集成到现有自动化项目（`pytest`、`unittest`）中。
 
 ## Install
 
@@ -39,7 +51,7 @@ pip install appium-python-client
 
 __方法一__
 
-申请LLM需要的key，在项目的根目录下创建`.env`文件。推荐`qwen`和 `deepseek`，一是便宜，二是方便。
+申请LLM需要的key，在项目的根目录下创建`.env`文件。
 
 | Provider      | Website                             | Environment Variables（`.env`）                                                                                                      | 
 |---------------|-------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
@@ -48,6 +60,14 @@ __方法一__
 | **✅千问**       | https://bailian.console.aliyun.com/ | `AUTOWING_MODEL_PROVIDER=qwen`<br>`DASHSCOPE_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789`                                       |
 | **✅豆包**       | https://console.volcengine.com/     | `AUTOWING_MODEL_PROVIDER=doubao`<br>`ARK_API_KEY=f61d2846-xxx-xxx-xxxx-xxxxxxxxxxxxx`<br>`DOUBAO_MODEL_NAME=ep-20250207200649-xxx` |
 | **✅Gemini**   | https://aistudio.google.com/        | `AUTOWING_MODEL_PROVIDER=gemini`<br>`GOOGLE_API_KEY=AIabdefghijklmnopqrstwvwxyz0123456789`                                         |
+| **✅Kimi**     | https://platform.moonshot.cn/       | `AUTOWING_MODEL_PROVIDER=kimi`<br>`KIMI_API_KEY=sk-abdefghijklmnopqrstwvwxyz0123456789`                                            |
+
+> 各提供商的模型版本均可通过环境变量自定义：`OPENAI_MODEL_NAME` / `DEEPSEEK_MODEL_NAME` / `QWEN_MODEL_NAME` /
+`GEMINI_MODEL_NAME` /
+> `DOUBAO_MODEL_NAME`（豆包为必填）/ `KIMI_MODEL_NAME`。
+>
+> 👉 完整配置项（含模型名、API 端点、视觉模式、缓存、重试、超时等运行配置）见：
+> [docs/env_config.md](./docs/env_config.md)，模板文件 [examples/.env.example](./examples/.env.example)。
 
 
 __方法二__
@@ -103,8 +123,7 @@ def test_bing_search(page: Page, ai):
 
 ```shell
 > pytest test_playwright_pytest.py -s
-> ================================================= test session
-> starts =================================================
+> ================================================= test session starts =================================================
 > platform win32 -- Python 3.12.3, pytest-8.3.4, pluggy-1.5.0
 > rootdir: D:\github\seldomQA\auto-wing
 > configfile: pyproject.toml
